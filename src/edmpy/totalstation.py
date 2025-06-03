@@ -343,18 +343,16 @@ class totalstation(object):
             elif self.make in ['Leica GeoCom']:
                 self.set_horizontal_angle_geocom(angle)
                 time.sleep(1.5)
-            elif self.make == 'SOKKIA':
+            elif self.make == 'Sokkia':
                 self.set_horizontal_angle_sokkia(angle)
+            elif self.make == 'Nikon':
+                self.set_horizontal_angle_nikon(angle)
+            elif self.make == 'Nikon (SET)':
+                self.set_horizontal_angle_nikon_set(angle)
             elif self.make == 'Simulate':
                 pass
             elif self.make in ['Manual XYZ', 'Manual VHD']:
                 pass
-
-    def set_horizontal_angle_nikon(self, angle):
-        # need to send to station in format dddmmss
-        self.send("!HAN" + angle.encode())
-        # delay(1)
-        self.clear_serial_buffers()
 
     def launch_point_simulate(self):
         # Put the points into one of two units
@@ -389,8 +387,14 @@ class totalstation(object):
         elif self.make == "GeoMax":
             self.launch_point_geomax()
 
-        elif self.make == "SOKKIA":
+        elif self.make == "Sokkia":
             self.launch_point_sokkia()
+
+        elif self.make == "Nikon":
+            self.launch_point_nikon()
+
+        elif self.make == "Nikon (SET)":
+            self.launch_point_nikon_set()
 
         elif self.make == 'Simulate':
             error = self.launch_point_simulate()
@@ -405,6 +409,16 @@ class totalstation(object):
             self.fetch_point_leica()
         elif self.make in ['Leica GeoCom']:
             self.fetch_point_leica_geocom()
+        elif self.make == 'Nikon':
+            self.fetch_point_nikon()
+        elif self.make == 'Nikon (SET)':
+            self.fetch_point_nikon_set()
+        elif self.make == 'Topcon':
+            self.fetch_point_topcon()
+        elif self.make == 'GeoMax':
+            self.fetch_point_geomax()
+        elif self.make == 'Sokkia':
+            self.fetch_point_sokkia()
 
     def vhd_from_xyz(self):
         self.hangle = self.angle_between_xy_pairs(self.location.x, self.location.y, self.xyz.x, self.xyz.y)
@@ -931,13 +945,90 @@ class totalstation(object):
         return True
 
     """
+    Nikon specific functions (these won't work yet - they need to be converted to proper Nikon commands)
+    See Nikon (SET) for running a Nikon total station as if it is Sokkkia
+    """
+    def launch_point_nikon(self):
+        self.send(chr(17).encode())
+
+    # def set_horizontal_angle_nikon(self, angle):
+    #     # need to send to station in format dddmmss
+    #     self.send("!HAN" + angle.encode())
+    #     # delay(1)
+    #     self.clear_serial_buffers()
+
+    def set_horizontal_angle_nikon(self, angle):
+        # need to send to station in format dddmmss
+        # angle = self.make_dddmmss(angle)
+        set_angle_command = "!HAN" + angle + "\r\n"
+        self.send(set_angle_command.encode())
+        # delay(5)
+        self.clear_serial_buffers()
+
+    def fetch_point_nikon(self):
+        self.pnt = self.receive()
+        if self.pnt:
+            self.parse_nikon()
+            self.vhd_to_xyz()
+
+    def parse_nikon(self):
+        self.sloped = None
+        self.hangle = None
+        self.vangle = None
+        if self.pnt:
+            vhd = self.pnt.strip().split(" ")
+            for item in vhd:
+                if item.startswith('SD'):
+                    self.sloped = float(item[3:]) / 10000.0
+                elif item.startswith('HA'):
+                    self.hangle = Angle(f'{item[3:7]}d{item[7:9]}m{item[9:12]}').d
+                elif item.startswith('V'):
+                    self.vangle = Angle(f'{item[3:7]}d{item[7:9]}m{item[9:12]}').d
+
+    """
+    Nikon SET protocols.  This means the Nikon acts like a Sokkia.
+    """
+    def launch_point_nikon_set(self):
+        self.send(chr(17).encode())
+
+    def set_horizontal_angle_nikon_set(self, angle):
+        # need to send to station in format ddd.mmss
+        set_angle_command = f"/Dc {self.make_dddmmss(angle)}\r\n"
+        self.send(set_angle_command.encode())
+        self.clear_serial_buffers()
+
+    def fetch_point_nikon_set(self):
+        self.pnt = self.receive()
+        if self.pnt:
+            self.parse_nikon_set()
+            self.vhd_to_xyz()
+
+    def parse_nikon_set(self):
+        if self.pnt:
+            self.sloped = None
+            self.hangle = None
+            self.vangle = None
+            vhd = self.pnt.strip().split(" ")
+            if len(vhd) >= 3:
+                try:
+                    self.sloped = float(vhd[0]) / 1000.0
+                    if vhd[1][0] != 'E':
+                        self.vangle = Angle(f'{vhd[1][:3]}d{vhd[1][3:5]}m{vhd[1][5:7]}').d
+                    if vhd[2][0] != 'E':
+                        self.hangle = Angle(f'{vhd[2][:3]}d{vhd[2][3:5]}m{vhd[2][5:7]}').d
+                except ValueError:
+                    pass
+
+    """
     Sokkia specific functions
+    Note - I am not sure these work.  I need someone with a Sokkia total station to test them.
     """
     def launch_point_sokkia(self):
         self.send(chr(17).encode())
 
     def set_horizontal_angle_sokkia(self, angle):
         # need to send to station in format ddd.mmss
+        angle = self.make_dddmmss(angle)
         set_angle_command = "/Dc " + angle + "\r\n"
         self.send(set_angle_command.encode())
         # delay(5)
@@ -946,10 +1037,10 @@ class totalstation(object):
     def fetch_point_sokkia(self):
         self.pnt = self.receive()
         if self.pnt:
-            self.parce_sokkia()
+            self.parse_sokkia()
             self.vhd_to_xyz()
 
-    def parce_sokkia(self):
+    def parse_sokkia(self):
         if self.pnt:
             vhd = self.pnt.strip().split(" ")
             if len(vhd) == 3:
@@ -962,7 +1053,7 @@ class totalstation(object):
             else:
                 self.vangle = None
             if vhd[2][0] != 'E':
-                self.hangle = Angle(f'{vhd[1][:3]}d{vhd[1][3:5]}m{vhd[1][5:7]}').d
+                self.hangle = Angle(f'{vhd[2][:3]}d{vhd[2][3:5]}m{vhd[2][5:7]}').d
             else:
                 self.hangle = None
 
@@ -972,6 +1063,16 @@ class totalstation(object):
     """
     Leica specific functions
     """
+    def make_dddmmss(self, angle):
+        if angle.count('.') == 0:
+            angle = angle + '.0000'
+        elif angle.count('.') == 2:
+            dms = angle.split('.')
+            ms = '0000' + str(round(float(dms[1] + '.' + dms[2])))
+            ms = ms[-4:]
+            angle = str(dms[0] + '.' + ms)
+        return angle
+
     def pad_dms_leica(self, angle):
         degrees = ('000' + angle.split('.')[0])[-3:]
         minutes_seconds = (angle.split('.')[1] + '0000')[0:4]
@@ -980,13 +1081,7 @@ class totalstation(object):
     def set_horizontal_angle_leica(self, angle):
         # function expects angle as ddd.mmss input
         # but decimal seconds are possible
-        if angle.count('.') == 0:
-            angle = angle + '.0000'
-        elif angle.count('.') == 2:
-            dms = angle.split('.')
-            ms = '0000' + str(round(float(dms[1] + '.' + dms[2])))
-            ms = ms[-4:]
-            angle = str(dms[0] + '.' + ms)
+        angle = self.make_dddmmss(angle)
         set_angle_command = "PUT/21...4+%s0 \r\n" % self.pad_dms_leica(angle)
         self.send(set_angle_command.encode())
         return self.receive()
@@ -998,13 +1093,13 @@ class totalstation(object):
         self.pnt = self.receive()
         self.set_response_leica()
         if self.pnt:
-            self.parce_leica()
+            self.parse_leica()
             self.vhd_to_xyz()
 
     def set_response_leica(self):
         self.response = self.leica_trim_crlf(self.received) if self.received else ""
 
-    def parce_leica(self):
+    def parse_leica(self):
         if self.pnt:
             if self.pnt.startswith('*'):
                 self.pnt = self.pnt[1:]
@@ -1064,10 +1159,10 @@ class totalstation(object):
             self.receive()
             self.set_response_geomax()
             if self.response:
-                self.parce_geomax()
+                self.parse_geomax()
                 self.vhd_to_xyz()
 
-    def parce_geomax(self):
+    def parse_geomax(self):
         if self.response:
             if self.response.count(',') == 3:
                 return False

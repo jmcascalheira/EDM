@@ -116,10 +116,16 @@ Changes to Version 1.0.48
   Better error trapping of CSV export when there are bad characters
   Better handling of CFG files moved between MacOS and Windows
 
+Changes to Version 1.0.49
+  Added support for Nikon total stations using Sokkia Set protocol
+  Fixed spelling on parce vs parse
+  
 Bugs/To Do
     import CSV files that don't have quotes
     have a toggle for unit checking
     sort filter by docid
+
+URGENT - alpha ids don't work when using unit defaults
 
 
   have to click twice on unit to get it to switch units
@@ -217,8 +223,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.48'
-PRODUCTION_DATE = 'August 15, 2024'
+VERSION = '1.0.49'
+PRODUCTION_DATE = 'June, 2025'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
 __LASTCOMPORT__ = 16
@@ -650,6 +656,12 @@ class MainScreen(e5_MainScreen):
                 self.station.fetch_point_geomax()
             elif self.station.make in ['Topcon']:
                 self.station.fetch_point_topcon()
+            elif self.station.make in ['Nikon']:
+                self.station.fetch_point_nikon()
+            elif self.station.make in ['Nikon (SET)']:
+                self.station.fetch_point_nikon_set()
+            elif self.station.make in ['Sokkia']:
+                self.station.fetch_point_sokkia()
             if self.station.response:
                 self.event.cancel()
                 self.station.make_global()
@@ -695,6 +707,13 @@ class MainScreen(e5_MainScreen):
                 self.station.fetch_point_geomax()
             elif self.station.make in ['Topcon']:
                 self.station.fetch_point_topcon()
+            elif self.station.make in ['Nikon']:
+                self.station.fetch_point_nikon()
+            elif self.station.make in ['Nikon (SET)']:
+                self.station.fetch_point_nikon_set()
+            elif self.station.make in ['Sokkia']:
+                self.station.fetch_point_sokkia()
+
             if self.station.response:
                 self.station.make_global()
                 self.station.prism_adjust()
@@ -1312,7 +1331,15 @@ class ComTestScreen(Screen):
         Clipboard.copy(self.io.scrolling_label.text)
 
     def set_hangle(self, instance):
-        if self.hangle_input.textbox.text:
+        if not self.station.serialcom.is_open:
+            self.popup = e5_MessageBox('Error', '\n The COM port is not open.  Please open the COM port first.', colors=self.colors)
+            self.popup.open()
+            return
+        if not self.hangle_input.textbox.text:
+            self.popup = e5_MessageBox('Error', '\n Please enter an angle in the format ddd.mmss.', colors=self.colors)
+            self.popup.open()
+            return
+        else:
             self.station.set_horizontal_angle(self.hangle_input.textbox.text)
             # self.io.scrolling_label.text = self.station.io
 
@@ -1322,7 +1349,12 @@ class ComTestScreen(Screen):
         sm.current = 'StationConfigurationScreen'
 
     def record_point(self, instance):
-        self.station.stop_and_clear_geocom()
+        if not self.station.serialcom.is_open:
+            self.popup = e5_MessageBox('Error', '\n The COM port is not open.  Please open the COM port first.', colors=self.colors)
+            self.popup.open()
+            return
+        if self.station.make == "Leica GeoCom":
+            self.station.stop_and_clear_geocom()
         self.station.take_shot()
 
     def close(self, instance):
@@ -1536,7 +1568,7 @@ class record_button(e5_button):
                 self.popup = e5_MessageBox('Set horizonal angle', message,
                                             call_back=self.now_take_shot, colors=self.colors)
                 self.popup.open()
-            elif self.station.make in ['Leica', 'Wild', 'Leica GeoCom', 'Sokkia', 'Topcon', 'GeoMax', 'Simulate']:
+            elif self.station.make in ['Leica', 'Wild', 'Leica GeoCom', 'Sokkia', 'Nikon', 'Nikon (SET)', 'Topcon', 'GeoMax', 'Simulate']:
                 self.popup = self.get_prism_height()
                 self.popup.auto_dismiss = False
                 self.popup.open()
@@ -1664,6 +1696,12 @@ class record_button(e5_button):
                 self.station.fetch_point_geomax()
             elif self.station.make in ['Topcon']:
                 self.station.fetch_point_topcon()
+            elif self.station.make in ['Nikon']:
+                self.station.fetch_point_nikon()
+            elif self.station.make in ['Nikon (SET)']:
+                self.station.fetch_point_nikon_set()
+            elif self.station.make in ['Sokkia']:
+                self.station.fetch_point_sokkia()
             if self.station.response or self.station.make in ['Manual XYZ', 'Manual VHD', 'Simulate']:
                 self.station.prism_adjust()
                 if self.station.xyz.x is not None and self.station.xyz.y is not None and self.station.xyz.z is not None:
@@ -2382,7 +2420,7 @@ class StationConfigurationScreen(Screen):
 
     def build_screen(self):
         self.station_type = station_setting(label_text='Station type',
-                                            spinner_values=("Leica", "Leica GeoCom", "GeoMax", "Wild", "Topcon", "Sokkia", "Microscribe",
+                                            spinner_values=("Leica", "Leica GeoCom", "GeoMax", "Wild", "Topcon", "Sokkia", "Nikon", "Nikon (SET)", "Microscribe",
                                                                 "Manual XYZ", "Manual VHD", "Simulate"),
                                             call_back=self.toggle_buttons,
                                             id='station_type',
