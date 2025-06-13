@@ -144,6 +144,10 @@
                         on_press: app.root.current = 'RecordDatumsScreen'
                         color: SUBMENU_COLOR
                     ActionButton:
+                        text: 'Show Station'
+                        on_release: root.show_current_station()
+                        color: SUBMENU_COLOR
+                    ActionButton:
                         text: 'Options'
                         on_press: app.root.current = 'OptionsScreen'
                         color: SUBMENU_COLOR

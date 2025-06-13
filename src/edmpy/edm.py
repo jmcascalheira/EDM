@@ -119,13 +119,18 @@ Changes to Version 1.0.48
 Changes to Version 1.0.49
   Added support for Nikon total stations using Sokkia Set protocol
   Fixed spelling on parce vs parse
-  
+  Fixed bug with random letter IDs wherein they were overwritten in some siutations by the next ID
+  Added some helpful messaging when selecting total station types
+  Added a popup to report the current station type and coordinates to the main Setup menu
+  Fixed a bug with incrementing fields when a new unit is started
+
+
 Bugs/To Do
     import CSV files that don't have quotes
     have a toggle for unit checking
     sort filter by docid
 
-URGENT - alpha ids don't work when using unit defaults
+URGENT - suffix issue - see Radu Whatsapp messages
 
 
   have to click twice on unit to get it to switch units
@@ -872,6 +877,15 @@ class MainScreen(e5_MainScreen):
         self.popup.auto_dismiss = False
         self.popup.open()
 
+    def show_current_station(self):
+        if not self.ready_to_use():
+            self.popup = self.message_open_cfg_first()
+        else:
+            message = self.station.status() if self.station else 'Total station information is not available.\n\n'
+            self.popup = e5_MessageBox(title="Current Station", message=message, colors=self.colors)
+        self.popup.auto_dismiss = False
+        self.popup.open()
+
     def show_csv_datatype(self):
         if not self.ready_to_use():
             self.popup = self.message_open_cfg_first()
@@ -1069,12 +1083,28 @@ class MainScreen(e5_MainScreen):
             new_record = self.fill_button_defaults(new_record)
             new_record = self.fill_link_fields(new_record)
             new_record = self.do_increments(new_record)
+            new_record = self.do_only_alphas_again(new_record)          # Because previous operations may have overwritten alpha IDs
             new_record['SUFFIX'] = 0
         else:
             new_record = self.fill_empty_with_last(new_record)
             new_record['SUFFIX'] = int(self.get_last_value('SUFFIX')) + 1
 
         self.data.db.table(self.data.table).insert(new_record)
+
+    def do_only_alphas_again(self, new_record):
+        for button_no in range(1, __BUTTONS__):
+            button = self.cfg.get_block(f'BUTTON{button_no}')
+            if button:
+                if 'TITLE' in button.keys():
+                    if button['TITLE'] == self.station.shot_type:
+                        fieldnames = self.cfg.fields()
+                        for button_default in button:
+                            if button_default in fieldnames:
+                                if button[button_default].upper() == 'ALPHA':
+                                    # TODO Should be calibrated to the length of this field
+                                    new_record[button_default] = self.station.hash()
+                        break
+        return new_record
 
     def fill_empty_with_last(self, new_record):
         for field in self.cfg.fields():
@@ -1100,6 +1130,7 @@ class MainScreen(e5_MainScreen):
                                     new_record[button_default] = self.station.hash()
                                 else:
                                     new_record[button_default] = button[button_default]
+                        break
         return new_record
 
     def do_increments(self, new_record):
@@ -1144,6 +1175,15 @@ class MainScreen(e5_MainScreen):
                         if linkfields:
                             for link_fieldname in linkfields.keys():
                                 new_record[link_fieldname] = linkfields[link_fieldname]
+                        else:
+                            for link_fieldname in field.link_fields:
+                                link_field = self.cfg.get(link_fieldname)
+                                if link_field.increment:
+                                    if link_fieldname in new_record.keys():
+                                        if new_record[link_fieldname] == '':
+                                            new_record[link_fieldname] = '0'
+                                    else:
+                                        new_record[link_fieldname] = '0'
         return new_record
 
     def find_unit_and_fill_fields(self, new_record):
@@ -1155,6 +1195,9 @@ class MainScreen(e5_MainScreen):
             if unitfields:
                 for field in unitfields.keys():
                     new_record[field] = unitfields[field]
+            else:
+                
+                pass
         return new_record
 
     def fill_default_fields(self, new_record):
@@ -2397,7 +2440,9 @@ class station_setting(GridLayout):
             self.valid_comports.append(self.comportIsUsable(f"COM{self.comport_to_test}"))
 
     def comports(self):
-        return list(filter(None.__ne__, [self.comportIsUsable(f"COM{comno}") for comno in range(1, __LASTCOMPORT__ + 1)]))
+        comport_list = list([self.comportIsUsable(f"COM{comno}") for comno in range(1, __LASTCOMPORT__ + 1)])
+        comport_list = [port for port in comport_list if port is not None]
+        return comport_list
 
 
 class StationConfigurationScreen(Screen):
@@ -2411,12 +2456,14 @@ class StationConfigurationScreen(Screen):
         self.call_back = 'MainScreen'
 
     def on_enter(self):
+        self.entering = True
         self.clear_widgets()
         self.layout = GridLayout(cols=1, spacing=5, padding=5,
                                     size_hint_max_x=MAX_SCREEN_WIDTH, size_hint_y=1,
                                     pos_hint={'center_x': .5, 'center_y': .5})
         self.add_widget(self.layout)
         self.build_screen()
+        self.entering = False
 
     def build_screen(self):
         self.station_type = station_setting(label_text='Station type',
@@ -2487,6 +2534,40 @@ class StationConfigurationScreen(Screen):
         self.baud_rate.spinner.disabled = disabled
         self.comports.spinner.disabled = disabled
         self.communications.spinner.disabled = disabled
+
+        if self.entering:
+            return
+
+        message = ""
+        if self.station_type.spinner.text == "Nikon":
+            message += "\nNikon is not fully tested.  If you have a Nikon that allows you to set it to use SET protocols (which are also Sokkia protocols) then use this option in this program (Nikon SET).  "
+            message += "If you are interested in helping me debug Nikon stations, let me know.  Also, setting the horizontal angle only may work.  This is just me debuggging the program.  Let me know."
+
+        if self.station_type.spinner.text == "Nikon (SET)":
+            message += "\nNikon SET is a set of protocols that are also used by Sokkia.  You have to set this option on the Nikon station itself as well.  This is new (Summer, 2025), but appears to work."
+
+        if self.station_type.spinner.text == "Leica":
+            message += "\nThis is for the older Leica format.  At some point, Leica introduced the GeoCom format as well, and many stations could use both the older format and the newer GeoCom format.  "
+            message += "Recently though, Leica completely dropped the older format and now uses only GeoCom.  If you have a newer station use it instead of the Leica type.  "
+
+        if self.station_type.spinner.text == "Leica GeoCom":
+            message += "\nThis is the format to use with newer Leica stations.  If you are unsure, start here and then try the Leica option."
+
+        if self.station_type.spinner.text == "Sokkia":
+            message += "\nThese are not yet tested.  Please contact me if you have a Sokkia station and are willing to help test this option.  "
+            message += "My guess is that setting the horizontal angle will work, and it may launch a shot, but it will not correctly parse the return data.  "
+            message += "I think I can fix it quickly, but I need someone with a Sokkia station to test it."
+
+        if self.station_type.spinner.text == "Wild":
+            message += "\nThis is an old total station type that i have not seen in year.  We had it working with our other versions of this program, and I could likely make it work with this version, but it is not yet tested.  "
+            message += "Please contact me if you have a Wild station and are willing to help test this option."
+
+        if self.station_type.spinner.text == "Topcon":
+            message += "\nTopcon should work well with this program.  If you experience difficulties, let me know.  "
+
+        if message:
+            self.popup = e5_MessageBox(f'{self.station_type.spinner.text} Station', message, response_type="OK", colors=self.colors)
+            self.popup.open()
 
     def update_ini(self, instance):
         self.station.make = self.station_type.spinner.text

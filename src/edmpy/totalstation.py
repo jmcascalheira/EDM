@@ -951,18 +951,27 @@ class totalstation(object):
     def launch_point_nikon(self):
         self.send(chr(17).encode())
 
-    # def set_horizontal_angle_nikon(self, angle):
-    #     # need to send to station in format dddmmss
-    #     self.send("!HAN" + angle.encode())
-    #     # delay(1)
-    #     self.clear_serial_buffers()
+    # see also https://groups.google.com/g/sci.engr.surveying/c/1tLM6JHtMgI?pli=1
+    def nikon_checksum(self, buf):
+        """
+        Get Nikon checksum for buf. Second complement of the sum of ascii codes.
+        Returns the last two characters as a string (uppercase).
+        """
+        total = 0
+        for c in buf:
+            total += ord(c)
+        s = total & 0xFF  # lower one byte
+        checksum = (s % 0x40) + 0x20
+        return chr(checksum)
 
     def set_horizontal_angle_nikon(self, angle):
         # need to send to station in format dddmmss
-        # angle = self.make_dddmmss(angle)
-        set_angle_command = "!HAN" + angle + "\r\n"
+        angle = self.format_angle_nikon_set(angle)
+        angle = angle.replace('.', '')
+        set_angle_command = "CT\x02!HAN" + angle + "\x03"
+        set_angle_command += self.nikon_checksum(set_angle_command)
+        set_angle_command = "\x01" + set_angle_command + "\x04\r\n"
         self.send(set_angle_command.encode())
-        # delay(5)
         self.clear_serial_buffers()
 
     def fetch_point_nikon(self):
@@ -988,17 +997,44 @@ class totalstation(object):
     """
     Nikon SET protocols.  This means the Nikon acts like a Sokkia.
     """
+    def sokkia_checksum(self, buf):
+        """
+        Get Sokkia checksum for buf. Second complement of the sum of ascii codes.
+        Returns the last two hex digits as a string (uppercase).
+        """
+        total = 0
+        for c in buf:
+            total += ord(c)
+        total = -total
+        hex_str = f"{total:X}"
+        # Return the last two characters (pad with zeros if needed)
+        return hex_str[-2:].upper().zfill(2)
+
     def launch_point_nikon_set(self):
-        self.send(chr(17).encode())
+        launch = chr(17) + "\r\n"
+        self.send(launch.encode())
 
     def set_horizontal_angle_nikon_set(self, angle):
         # need to send to station in format ddd.mmss
-        set_angle_command = f"/Dc {self.make_dddmmss(angle)}\r\n"
+        angle = self.format_angle_nikon_set(angle)
+        set_angle_command = f"/Dc {angle},"
+        set_angle_command += self.sokkia_checksum(set_angle_command)
+        set_angle_command += "\r\n"
         self.send(set_angle_command.encode())
         self.clear_serial_buffers()
 
+    def format_angle_nikon_set(self, angle):
+        # Converts angle to ddd.mmss format
+        if '.' not in angle:
+            angle += '.'
+        angle = '000' + angle + '0000'
+        decimal_point = angle.index('.')
+        angle = angle[decimal_point - 3: decimal_point] + "." + angle[decimal_point + 1: decimal_point + 5]
+        return angle
+
     def fetch_point_nikon_set(self):
         self.pnt = self.receive()
+        self.set_response_nikon_set()
         if self.pnt:
             self.parse_nikon_set()
             self.vhd_to_xyz()
@@ -1019,6 +1055,9 @@ class totalstation(object):
                 except ValueError:
                     pass
 
+    def set_response_nikon_set(self):
+        self.response = self.received
+
     """
     Sokkia specific functions
     Note - I am not sure these work.  I need someone with a Sokkia total station to test them.
@@ -1027,12 +1066,7 @@ class totalstation(object):
         self.send(chr(17).encode())
 
     def set_horizontal_angle_sokkia(self, angle):
-        # need to send to station in format ddd.mmss
-        angle = self.make_dddmmss(angle)
-        set_angle_command = "/Dc " + angle + "\r\n"
-        self.send(set_angle_command.encode())
-        # delay(5)
-        self.clear_serial_buffers()
+        self.set_horizontal_angle_nikon_set(angle)
 
     def fetch_point_sokkia(self):
         self.pnt = self.receive()

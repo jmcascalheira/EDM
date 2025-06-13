@@ -98,7 +98,7 @@ class DB(dbs):
     def distance(self, p1, a_unit):
         return sqrt((p1.x - a_unit.centerx)**2 + (p1.y - a_unit.centery)**2)
 
-    def point_in_unit(self, xyz = None):
+    def point_in_unit(self, xyz=None):
         if xyz.x is not None and xyz.y is not None:
             for unitname in self.names('units'):
                 a_unit = self.get_unit(unitname)
@@ -111,7 +111,7 @@ class DB(dbs):
                             return a_unit.name
         return None
 
-    def get_link_fields(self, name = None, value = None):
+    def get_link_fields(self, name=None, value=None):
         if name is not None and value is not None and self.db is not None:
             q = Query()
             r = self.db.table(name).search(q[name].matches('^' + value + '$', re.IGNORECASE))
