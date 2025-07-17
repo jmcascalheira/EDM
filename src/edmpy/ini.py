@@ -4,7 +4,7 @@ from constants import APP_NAME
 
 class INI(blockdata):
 
-    def __init__(self, filename = ''):
+    def __init__(self, filename=''):
         if filename == '':
             filename = APP_NAME + '.ini'
         self.filename = filename
@@ -12,8 +12,9 @@ class INI(blockdata):
         self.backup_interval = 0
         self.first_time = True
         self.debug = False
+        self.blocks = {}
 
-    def open(self, filename = ''):
+    def open(self, filename=''):
         if filename:
             self.filename = filename
         self.blocks = self.read_blocks()

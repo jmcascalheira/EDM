@@ -123,7 +123,9 @@ Changes to Version 1.0.49
   Added some helpful messaging when selecting total station types
   Added a popup to report the current station type and coordinates to the main Setup menu
   Fixed a bug with incrementing fields when a new unit is started
-
+  Added F12 and menu option to reset communications port (for instance after hibernate)
+  Fixed a bug introduced with recent refactoring that added fields to edit datums/units/prisms screens cummulatively
+  Fixed some bugs with deleting datums that sometimes crashed the program
 
 Bugs/To Do
     import CSV files that don't have quotes
@@ -148,6 +150,7 @@ URGENT - suffix issue - see Radu Whatsapp messages
 """
 
 
+from kivy.core.window import Window
 from kivy.config import Config
 from kivy.core.clipboard import Clipboard
 from kivy.graphics import Color, Rectangle
@@ -229,7 +232,7 @@ except ModuleNotFoundError:
     pass
 
 VERSION = '1.0.49'
-PRODUCTION_DATE = 'June, 2025'
+PRODUCTION_DATE = 'July, 2025'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
 __LASTCOMPORT__ = 16
@@ -277,6 +280,16 @@ class MainScreen(e5_MainScreen):
         self.add_screens()
         restore_window_size_position(APP_NAME, self.ini)
 
+    def _on_keyboard_down(self, window, key, scancode, codepoint, modifier):
+        """
+        Handle keyboard events.
+        """
+        if key == 293:  # F12
+            self.ResetConnection()
+
+    def on_leave(self, *args):
+        Window.unbind(on_key_down=self._on_keyboard_down)
+
     def on_enter(self, *args):
         if self.warnings or self.errors:
             self.popup = self.warnings_and_errors_popup(self.warnings, self.errors, auto_dismiss=False)
@@ -287,6 +300,7 @@ class MainScreen(e5_MainScreen):
             self.popup.open()
             self.ini.first_time = False
         self.update_info_label()
+        Window.bind(on_key_down=self._on_keyboard_down)
 
     def setup_logger(self):
         logger = logging.getLogger(__name__)
@@ -686,7 +700,7 @@ class MainScreen(e5_MainScreen):
                 # Update the XYZ in the current edit screen
                 sm.get_screen('EditPointScreen').reset_defaults_from_recorded_point(self.station)
 
-                # If not a continuation shot, get the unit for these XY coordinates and 
+                # If not a continuation shot, get the unit for these XY coordinates and
                 # if it is different than the current
                 # then update the linked fields.  And fix other stuff.
                 if self.station.shot_type != 'continue':
@@ -722,7 +736,8 @@ class MainScreen(e5_MainScreen):
             if self.station.response:
                 self.station.make_global()
                 self.station.prism_adjust()
-                self.popup.refresh_text(self.make_x_shot_summary())
+                if hasattr(self.popup, "refresh_text"):
+                    self.popup.refresh_text(self.make_x_shot_summary())
                 if not self.station.xyz.is_none():
                     self.event.cancel()
 
@@ -876,6 +891,24 @@ class MainScreen(e5_MainScreen):
                                         colors=self.colors)
         self.popup.auto_dismiss = False
         self.popup.open()
+
+    def ResetConnection(self):
+        if not self.ready_to_use():
+            self.popup = self.message_open_cfg_first()
+        else:
+            self.popup = e5_MessageBox(title="Reset Connection",
+                                        message='\n This will reset the connection to the EDM station by closing and reopening the port.  '
+                                                'You do not need to reinitialize the station.',
+                                        response_type="Other",
+                                        response_text=['Cancel', 'Reset'],
+                                        call_back=[self.dismiss_popup, self.DoResetConnection],
+                                        colors=self.colors)
+        self.popup.auto_dismiss = False
+        self.popup.open()
+
+    def DoResetConnection(self, instance):
+        self.station.ResetConnection()
+        self.popup.dismiss()
 
     def show_current_station(self):
         if not self.ready_to_use():
@@ -1195,9 +1228,6 @@ class MainScreen(e5_MainScreen):
             if unitfields:
                 for field in unitfields.keys():
                     new_record[field] = unitfields[field]
-            else:
-                
-                pass
         return new_record
 
     def fill_default_fields(self, new_record):
@@ -1588,7 +1618,30 @@ class record_button(e5_button):
         except ValueError:
             return False
 
+    def check_for_missing_values(self):
+        if self.setup_type == 'Over a datum + Record a datum':
+            if self.datum1.datum.is_none() or self.datum2.datum.is_none():
+                return '\nSelect two datums before recording.  Two datums are needed to calculate and set the horizontal angle.'
+            if self.datum1.datum.name == self.datum2.datum.name:
+                return '\nThe two datums selected are the same.  Select two different datums before recording.'
+        elif self.setup_type == 'Record two datums':
+            if self.datum1.datum.is_none() or self.datum2.datum.is_none():
+                return '\nSelect two datums before recording.'
+            if self.datum1.datum.name == self.datum2.datum.name:
+                return '\nThe two datums selected are the same.  Select two different datums before recording.'
+        elif self.setup_type == 'Record three datums':
+            if self.datum1.datum.is_none() or self.datum2.datum.is_none() or self.datum3.datum.is_none():
+                return '\nSelect three datums before recording.'
+            if self.datum1.datum.name == self.datum2.datum.name or self.datum1.datum.name == self.datum3.datum.name or self.datum2.datum.name == self.datum3.datum.name:
+                return '\nThe three datums selected are not all different.  Select three different datums before recording.'
+        return ''
+
     def record_datum(self, instance):
+        error_message = self.check_for_missing_values()
+        if error_message:
+            self.popup = e5_MessageBox('Input Error', error_message, colors=self.colors)
+            self.popup.open()
+            return
         self.set_angle()
 
     def get_angle(self):

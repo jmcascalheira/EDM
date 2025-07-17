@@ -11,7 +11,7 @@
         orientation: 'vertical'
         BoxLayout:
             ActionView:
-                size_hint_y : .1
+                size_hint_y : .08
                 use_separator: True
                 pos_hint: {'top': 1}
                 background_image: 'white-bg.png'
@@ -138,6 +138,10 @@
                     ActionButton:
                         text: 'Verify Station'
                         on_press: app.root.current = 'VerifyStationScreen'
+                        color: SUBMENU_COLOR
+                    ActionButton:
+                        text: 'Reset COM - F12'
+                        on_release: root.ResetConnection()
                         color: SUBMENU_COLOR
                     ActionButton:
                         text: 'Record Datums'

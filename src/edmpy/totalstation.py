@@ -3,6 +3,7 @@ from kivy.clock import Clock
 
 import serial
 from serial.serialutil import SerialTimeoutException
+from serial.serialutil import SerialException
 import os
 from geo import point, prism
 from constants import APP_NAME
@@ -135,6 +136,19 @@ class totalstation(object):
                     n += 1
         return txt
 
+    def ResetConnection(self):
+        self.close()
+        self.open()
+        if self.make in ['Simulate', 'Manual XYZ', 'Manual VHD', 'Microscribe']:
+            return False
+        if self.serialcom.is_open:
+            self.clear_serial_buffers()
+            self.clear_xyz()
+            self.set_error_message()
+            return True
+        else:
+            return False
+    
     def set_error_message(self):
         if self.error_code is not None:
             if "Leica" in self.make:
@@ -483,6 +497,10 @@ class totalstation(object):
                 self.receive()
                 return
 
+    def delay(self, seconds=1):
+        # This is used to wait for the station to respond
+        time.sleep(seconds) 
+
     # def check_receive_buffer(self, dt):
     #     if self.data_waiting():
     #         self.receive()
@@ -498,8 +516,13 @@ class totalstation(object):
             try:
                 self.serialcom.write(data)
                 self.add_to_io('Sent -> ' + data.decode())
+                # print('SENT -> ' + data.decode())
                 return True
+            except SerialException:
+                print("SerialException: Could not write to the serial port. Is it open?")
+                return False
             except SerialTimeoutException:
+                print("SerialTimeout: Could not write to the serial port. Is it open?")
                 return False
 
     def receive(self):
@@ -1020,8 +1043,12 @@ class totalstation(object):
         set_angle_command = f"/Dc {angle},"
         set_angle_command += self.sokkia_checksum(set_angle_command)
         set_angle_command += "\r\n"
-        self.send(set_angle_command.encode())
-        self.clear_serial_buffers()
+        # self.clear_io()
+        if self.send(set_angle_command.encode()):
+            self.delay(1)
+            self.clear_serial_buffers()
+        else:
+            print("Failed to send set angle command to Nikon SET total station.")
 
     def format_angle_nikon_set(self, angle):
         # Converts angle to ddd.mmss format

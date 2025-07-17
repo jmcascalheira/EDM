@@ -32,7 +32,7 @@ class CFG(blockdata):
             self.filename = filename
 
     def initialize(self):
-        # self.blocks = []
+        self.blocks = {}
         self.filename = ""
         self.path = ""
         self.current_field = None

@@ -1,10 +1,10 @@
-# EDMpy (Beta)
+# EDMpy
 
 The Python version of EDM-Mobile and EDMWin.
 
-This is now a Beta version which means that I am ready for other people to try to use it in field situations.  Beta means that I have eliminated the bugs that I know of but a) there are still bugs and b) users should proceed with some caution.  I would also recommend that if you do not have time to test extensively before going into the field, you should also have a backup option (e.g. EDM-Mobile or EDMWin).  By summer 2023 I will know better how the program is working.
+This is now a working version which means that many teams are now using it with few to no problems.  There are certainly still bugs, but at this point they are relatively few (though occassionally I lose my mind and  refactor the code which comes with some risks).  I would also recommend that if you do not have time to test extensively before going into the field, you should also have a backup option (e.g. EDM-Mobile or EDMWin).  
 
-If you want to work with the source code rather than the Windows distributable provided here (see Windows folder), you can clone this repository, setup a virtual environment, and install the required packages (pip -r requirements.txt).  I don't advise doing this for now unless you are keen in part because I will be making modifications a lot leading up to the summer of 2023.  If you are Mac user (or Linux), then the fastest way to start using the program is by installing it from PyPi (see below).
+If you want to work with the source code rather than the Windows distributable (exe file) provided here (see Windows folder), you can clone this repository, setup a virtual environment, and install the required packages (pip -r requirements.txt).  If you are Mac user (or Linux), then the fastest way to start using the program is by installing it from PyPi (see below).
 
 #### Installation
 
@@ -65,9 +65,9 @@ I am sorry when the program crashes as I want this to be as stable and useful as
 
 #### What total station should I use?
 
-Currently EDM is tested on Topcon and Leica.  For Topcon, I tested (in January of 2023) a model GM-55/EBL.  Topcon has kept their communication protocols very consistent over the last forty years.  The first version of this program was written for a Topcon GTS-3B, and I didn't change the code at all to work on the brand new GM-55.  My guess is that EDM will work on virtually any basic model of Topcon total station.  For Leica, I have tested an older Builder R200M, an older TCR403, a newer TS13 and a newer TS07.  Over the years, Leica introduced a new communications protocol called GeoCOM.  For a while I think some stations supported both the old protocol and the new GeoCOM.  Now I think they only support GeoCOM.  EDM supports both.  EDM now also works with GeoMax stations.
+Currently EDM is tested on Topcon, Leica, GeoMax, and Nikon (in SET mode).  It may now also work on Sokkia but I need help from someone to test this.
 
-In the past EDM also worked with Sokkia stations.  I think I could make it work again with Sokkia stations, but I need someone to help me test them.  The same is true for Nokkia stations, though here I think I never had a successful test.  If someone wants to work with me on it, I am willing to try again.  If you are a programmer, make the code work with these types, place a pull request, and I will put the code into the main program here.
+For Topcon, I tested (in January of 2023) a model GM-55/EBL.  Topcon has kept their communication protocols very consistent over the last forty years.  The first version of this program was written for a Topcon GTS-3B, and I didn't change the code at all to work on the brand new GM-55.  My guess is that EDM will work on virtually any basic model of Topcon total station.  For Leica, I have tested an older Builder R200M, an older TCR403, a newer TS13 and a newer TS07.  Over the years, Leica introduced a new communications protocol called GeoCOM.  For a while I think some stations supported both the old protocol and the new GeoCOM.  Now I think they only support GeoCOM.  EDM supports both.  EDM also works with GeoMax stations.  In the summer of 2025, I worked with a team to add Nikon stations running in SET mode.  SET mode means it uses the Sokkia protocol.  This means it also likely works with Sokkia stations, but as noted above I haven't been able to test this myself yet.  If you can help me, contact me.
 
 This version of EDM also works with Microscribes.  These are instruments built for taking 3D coordinates from objects.  However, we adapted them to excavate sediment blocks in the laboratory.  EDM will allow you to georeference these blocks so that as you record points, the XYZ coordinates are excavation grid coordinates rather than coordinates local to the Microscribe only.
 
@@ -75,7 +75,7 @@ This version of EDM also works with Microscribes.  These are instruments built f
 
 Currently EDM is only fully tested on Windows 10 and 11.  However, the libraries used here are specifically designed to work on Windows, Linux, MacOS and even Android.  The only issue I see is serial port drivers (but see also below BlueTooth).  In the coming months, I will be testing EDM on a variety of platforms including ChromeOS.  If you have experience running it on other platforms, please let me know.  For Android, I will have to produce a separate installation that I hope to work on soon.
 
-The main issues with a field computer are battery life and durability.  Now that the new program is written, I am looking for good field computers.  I have run both EDMWin and this version of EDM on a Topcon FC-6000 Geo Cell CE 128GB tablet with Windows 10.  This tablet is ruggized and comes with an exchangeable battery.  I will know better how they work in a few months, but it seems like a good solution.  I have also tested it on a reconditioned Panasonic ToughBook.  A fuller test of this unit will happen in the summer of 2024.  And I know a team using the Juniper Systems Mesa 2.  This looks a lot like the Topcon FC-6000.  I haven't used one myself, but a team will be using it in summer 2024.
+The main issues with a field computer are battery life and durability.  Now that the new program is written, I am looking for good field computers.  I have run both EDMWin and this version of EDM on a Topcon FC-6000 Geo Cell CE 128GB tablet with Windows 10.  This tablet is ruggized and comes with an exchangeable battery.  I will know better how they work in a few months, but it seems like a good solution.  I have also tested it on a reconditioned Panasonic ToughBook.  A fuller test of this unit will happen in the summer of 2024.  And I know a team using the Juniper Systems Mesa 2.  This looks a lot like the Topcon FC-6000.  I haven't used one myself, but a team will be using it in summer 2024.  [update - 2025 - all of the above mentioned tests seemed to have worked fine]
 
 #### How should I connect a computer to a total station?
 
@@ -102,6 +102,17 @@ I am working on this.  Once this program is working smoothly, I will add plot fu
 ##### Virus Warning
 
 Recently (May, 2024) I was helping someone put the program on a Windows 10 tablet.  However, the virus protection software (Microsoft) said the Windows exe version was a virus and immediately removed it.  It took a lot of time to find a work around.  Eventually we made exe programs a virus exception.  This is not a great solution.  I can assure you that edm.exe does not contain a virus.  I also personally downloaded the same version and scanned it with my virus detection software.  Nothing.  I will try to find a computer where I can replicate this and see what part of my program is giving this problem.  If you experience this as well, let me know.
+
+#### Changes to Version 1.0.49
+  Added support for Nikon total stations using Sokkia Set protocol (Sokkia likely works too but need help to test)
+  Fixed spelling on parce vs parse
+  Fixed bug with random letter IDs wherein they were overwritten in some siutations by the next ID
+  Added some helpful messaging when selecting total station types
+  Added a popup to report the current station type and coordinates to the main Setup menu
+  Fixed a bug with incrementing fields when a new unit is started
+  Added F12 and menu option to reset communications port (for instance after hibernate)
+  Fixed a bug introduced with recent refactoring that added fields to edit datums/units/prisms screens cummulatively
+  Fixed some bugs with deleting datums that sometimes crashed the program
 
 #### Changes to Version 1.0.48
 1.  Better error trapping of CSV export when there are bad characters.

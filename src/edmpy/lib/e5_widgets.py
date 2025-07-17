@@ -2234,6 +2234,8 @@ class e5_MessageBox(Popup):
     def keystroke(self, key, scancode, codepoint):
         if scancode == 13 and self.widget_with_focus:
             self.widget_with_focus.trigger_action()
+        if scancode == 27:
+            self.dismiss()
 
 
 class DataUploadScreen(Screen):
@@ -2658,8 +2660,7 @@ class DataUploadScreen(Screen):
                 unique_together = unique_together_xyz if tablename == 'xyz' else unique_together_context
                 online_record = self.record_already_exists(route, record_copy, unique_together, structure)
                 if online_record == 'Lookup error':
-                    self.error_message += f"\n\nRecord {self.unique_together_as_humanreadable(record_copy, unique_together)} - "\
-                                        "Unable to test whether this record already exists."
+                    self.error_message += f"\n\nRecord {self.unique_together_as_humanreadable(record_copy, unique_together)} - Unable to test whether this record already exists."
                     self.fails.append(self.unique_together_as_humanreadable(record_copy, unique_together))
                 elif online_record and self.overwrite.check.active:
                     url = f"{route['url']}{route['database']}/{route['table']}/update/{online_record['squid']}/"
@@ -3800,7 +3801,7 @@ class DataGridWidget(TabbedPanel):
         self.check_changes()
         datatable = self.get_widget_by_id(self.get_tab_by_name('Data').content, 'datatable')
         if datatable is not None:
-            if datatable.datagrid_doc_id:
+            if datatable.datagrid_doc_id is not None and datatable.datagrid_doc_id != '':
                 data_record = self.data.get(doc_id=int(datatable.datagrid_doc_id))
                 if data_record:
                     serialize_record = '\n Delete this record?\n\n'
@@ -3810,6 +3811,10 @@ class DataGridWidget(TabbedPanel):
                     self.panel3.populate(message=serialize_record,
                                             call_back=self.confirm_delete_record,
                                             colors=self.colors)
+            else:
+                self.panel3.populate(message=None,
+                                        call_back=None,
+                                        colors=self.colors)
 
     def open_panel4(self):
         self.check_changes()
@@ -3924,7 +3929,7 @@ class DataGridWidget(TabbedPanel):
             new_record = self.build_record_from_widgets(self.panel2)
             valid_data = self.cfg.validate_datarecord(new_record, self.data)
             if valid_data is True:
-                if datatable.datagrid_doc_id is not None:
+                if datatable.datagrid_doc_id is not None and datatable.datagrid_doc_id != '':
                     unique_error = self.check_unique_together(int(datatable.datagrid_doc_id), new_record)
                     if unique_error == '':
                         self.data.update(new_record, doc_ids=[int(datatable.datagrid_doc_id)])
@@ -3990,15 +3995,18 @@ class DataGridWidget(TabbedPanel):
     def delete_record(self, value):
         self.close_popup(value)
         datatable = self.get_widget_by_id(self.get_tab_by_name('Data').content, 'datatable')
-        if datatable is not None:
-            doc_id = int(datatable.datagrid_doc_id)
-            self.data.remove(doc_ids=[doc_id])
-            datatable.datagrid_doc_id = None
-            # datatable.datagrid_widget_row = None
-            self.reload_data()
-            self.panel3.populate(colors=self.colors)
-            self.switch_to(self.get_tab_by_name('Data'))
-
+        if datatable is not None and datatable.datagrid_doc_id is not None:
+            if datatable.datagrid_doc_id != '':
+                doc_id = int(datatable.datagrid_doc_id)
+                self.data.remove(doc_ids=[doc_id])
+                datatable.datagrid_doc_id = None
+                # datatable.datagrid_widget_row = None
+                self.reload_data()
+                self.panel3.populate(colors=self.colors)
+                self.switch_to(self.get_tab_by_name('Data'))
+            else:
+                datatable.datagrid_doc_id = None
+        
     def open_popup(self, content):
         self.popup = content
         self.popup.open()
