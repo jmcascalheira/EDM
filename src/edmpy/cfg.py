@@ -434,7 +434,7 @@ class CFG(blockdata):
             self.filename = filename
         self.path = os.path.split(self.filename)[0]
 
-        self.blocks = []
+        self.blocks = {}
         if os.path.isfile(self.filename):
             self.blocks = self.read_blocks()
             has_errors, errors = self.validate()
@@ -540,7 +540,7 @@ class CFG(blockdata):
         properties = ''
         points = []
         for doc_id in sorted(doc_ids):
-            row = table.get(doc_id = doc_ids[doc_id])
+            row = table.get(doc_id=doc_ids[doc_id])
             if not properties:
                 properties = self.build_properties(row, cfg_fields_optional)
             properties += ', "Suffix_%s": {' % row['SUFFIX'] + self.build_properties(row, cfg_fields_defaults) + "}"

@@ -127,6 +127,9 @@ Changes to Version 1.0.49
   Fixed a bug introduced with recent refactoring that added fields to edit datums/units/prisms screens cummulatively
   Fixed some bugs with deleting datums that sometimes crashed the program
 
+Changes to Version 1.0.50
+  Fixed a bug related to refactoring blocks from lists to dictionaries
+
 Bugs/To Do
     import CSV files that don't have quotes
     have a toggle for unit checking
@@ -231,8 +234,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.49'
-PRODUCTION_DATE = 'July, 2025'
+VERSION = '1.0.50'
+PRODUCTION_DATE = 'August, 2025'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
 __LASTCOMPORT__ = 16

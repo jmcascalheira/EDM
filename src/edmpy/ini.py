@@ -18,7 +18,7 @@ class INI(blockdata):
         if filename:
             self.filename = filename
         self.blocks = self.read_blocks()
-        self.first_time = (self.blocks == [])
+        self.first_time = (self.blocks == {})
         self.is_valid()
         self.incremental_backups = self.get_value(APP_NAME, 'IncrementalBackups').upper() == 'TRUE'
         self.backup_interval = int(self.get_value(APP_NAME, 'BackupInterval'))
