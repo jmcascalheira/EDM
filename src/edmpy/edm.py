@@ -130,13 +130,14 @@ Changes to Version 1.0.49
 Changes to Version 1.0.50
   Fixed a bug related to refactoring blocks from lists to dictionaries
 
+Changes to Version 1.0.51
+  Fixed a bug in CSV import that crashed the program if the file was not valid (now gives a error message instead)
+  Fixed catastrophic bug in microScribe handling that prevented new datums from being recorded
+  Fixed a number of bugs with importing CSV files of all kinds.
+
 Bugs/To Do
-    import CSV files that don't have quotes
     have a toggle for unit checking
     sort filter by docid
-
-URGENT - suffix issue - see Radu Whatsapp messages
-
 
   have to click twice on unit to get it to switch units
   add units to menu as you go along
@@ -234,8 +235,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.50'
-PRODUCTION_DATE = 'August, 2025'
+VERSION = '1.0.51'
+PRODUCTION_DATE = 'November, 2025'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
 __LASTCOMPORT__ = 16
@@ -937,7 +938,8 @@ class MainScreen(e5_MainScreen):
     def select_csv_file(self, instance):
         self.csv_data_type = instance.text
         self.popup.dismiss()
-        start_path = self.cfg.path if self.cfg.path else self.app_paths.app_data_path
+        app_paths = AppDataPaths(APP_NAME)
+        start_path = self.cfg.path if self.cfg.path else app_paths.app_data_path
         content = e5_LoadDialog(load=self.load_csv,
                                 cancel=self.dismiss_popup,
                                 start_path=start_path,
@@ -962,10 +964,23 @@ class MainScreen(e5_MainScreen):
 
     def read_csv_file(self, full_filename):
         data = []
-        with open(full_filename, newline='') as csvfile:
-            reader = csv.DictReader(csvfile, quoting=csv.QUOTE_NONNUMERIC)
-            for row in reader:
-                data.append(row)
+        try:
+            with open(full_filename, newline='') as csvfile:
+                reader = csv.DictReader(csvfile, quoting=csv.QUOTE_NONNUMERIC)
+                for row in reader:
+                    data.append(row)
+        except FileNotFoundError:
+            logger = logging.getLogger(__name__)
+            logger.error(f'CSV file {full_filename} not found.')
+            return [], []
+        except ValueError as ve:
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error reading CSV file {full_filename}: {ve}')
+            return [], []
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error reading CSV file {full_filename}: {e}')
+            return [], []
         return [field.upper() for field in reader.fieldnames], self.fix_suffix(data)
 
     def read_json_table(self, full_filename, data_type):
@@ -1024,7 +1039,7 @@ class MainScreen(e5_MainScreen):
                 errors = '\nThese data seem to have fewer than five fields.  To import units requires a Unit, Minx, Miny, Maxx, Maxy field.  '\
                          'If this is a CSV file, the first row in the file should contain these field names separated by commas.  '\
                          f'The fieldnames read were {fields}.'
-            if 'UNIT' not in fields or 'MINX' not in fields or 'MINY' not in fields or 'MAXX' not in fields or 'MAXY' not in fields:
+            if ('UNIT' not in fields and 'NAME' not in fields) or 'MINX' not in fields or 'MINY' not in fields or 'MAXX' not in fields or 'MAXY' not in fields:
                 errors = '\nIf these data are coming from a CSV file, the first row must list the field names (comma delimited) and '\
                          f'must include at least fields called Unit, Minx, Miny, Maxx, Maxy.  The fields read were {fields}.'
         if self.csv_data_type == 'Points':
@@ -1072,6 +1087,7 @@ class MainScreen(e5_MainScreen):
                     if hash_key in hash_unique_ids:
                         duplicate_doc_id = hash_unique_ids[hash_key]
                         self.data.db.table(self.data.table).remove(doc_ids=[duplicate_doc_id])
+                        hash_unique_ids = self.build_hash_unique_ids()
                         replacements += 1
                     # hash_unique_ids[hash_key] = new_docid
                     data_to_insert.append(insert_record)
@@ -1092,6 +1108,17 @@ class MainScreen(e5_MainScreen):
             fields, data = self.read_csv_file(full_filename)
         else:
             fields, data = self.read_json_table(full_filename, self.csv_data_type)
+
+        if not data or not fields:
+            if not data and not fields:
+                message = '\nThere was a problem reading the file.  Please check that it is a valid CSV or JSON file.  For csv/txt files, the first row should contain the field names, and all non-numeric fields should be enclosed in double quotes.'
+            elif not data:
+                message = '\nThe field names found were: %s, but no data records were found.  This can happen if the file is empty or the data rows are missing.  Please check that it is a valid CSV or JSON file.  For csv/txt files, the first row should contain the field names, and all non-numeric fields should be enclosed in double quotes.' % ', '.join(fields)
+            else:
+                message = '\nThere was a problem reading the file.  No field names were found.  Please check that it is a valid CSV or JSON file.  For csv/txt files, the first row should contain the field names, and all non-numeric fields should be enclosed in double quotes.'
+            self.popup = e5_MessageBox('CSV Import', message, response_type="OK", call_back=self.close_popup, colors=self.colors)
+            self.open_popup()
+            return ['There was a problem reading the file.  Please check that it is a valid CSV or JSON file.']
 
         errors = self.error_check_import(fields)
 
@@ -1491,7 +1518,7 @@ class RecordDatumsScreen(Screen):
 
     def delete_and_save(self, instance):
         self.popup.dismiss()
-        self.data.delete_datum(self.datum_name.txt.texbox.text)
+        self.data.delete_datum(self.datum_name.txt.textbox.text)
         self.save_datum()
 
     def save_datum(self):
@@ -1786,7 +1813,7 @@ class record_button(e5_button):
 
     def check_for_station_response(self, dt):
         # print('.', end = "")
-        if self.station.data_waiting() or self.station.make in ['Manual XYZ', 'Manual VHD', 'Simulate']:
+        if self.station.data_waiting() or self.station.make in ['Manual XYZ', 'Manual VHD', 'Simulate', 'Microscribe']:
             if self.station.make in ['Leica']:
                 self.station.fetch_point()
             elif self.station.make in ['Leica GeoCom']:
@@ -1801,7 +1828,7 @@ class record_button(e5_button):
                 self.station.fetch_point_nikon_set()
             elif self.station.make in ['Sokkia']:
                 self.station.fetch_point_sokkia()
-            if self.station.response or self.station.make in ['Manual XYZ', 'Manual VHD', 'Simulate']:
+            if self.station.response or self.station.make in ['Manual XYZ', 'Manual VHD', 'Simulate', 'Microscribe']:
                 self.station.prism_adjust()
                 if self.station.xyz.x is not None and self.station.xyz.y is not None and self.station.xyz.z is not None:
                     self.station.make_global()

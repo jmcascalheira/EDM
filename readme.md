@@ -103,6 +103,11 @@ I am working on this.  Once this program is working smoothly, I will add plot fu
 
 Recently (May, 2024) I was helping someone put the program on a Windows 10 tablet.  However, the virus protection software (Microsoft) said the Windows exe version was a virus and immediately removed it.  It took a lot of time to find a work around.  Eventually we made exe programs a virus exception.  This is not a great solution.  I can assure you that edm.exe does not contain a virus.  I also personally downloaded the same version and scanned it with my virus detection software.  Nothing.  I will try to find a computer where I can replicate this and see what part of my program is giving this problem.  If you experience this as well, let me know.
 
+#### Changes to Version 1.0.51
+  Fixed a bug in CSV import that crashed the program if the file was not valid (now gives a error message instead)
+  Fixed catastrophic bug in microScribe handling that prevented new datums from being recorded
+  Fixed a number of CSV import related bugs
+
 #### Changes to Version 1.0.50
   Fixed a bug related to refactoring blocks from lists to dictionaries
 
