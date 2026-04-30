@@ -135,6 +135,9 @@ Changes to Version 1.0.51
   Fixed catastrophic bug in microScribe handling that prevented new datums from being recorded
   Fixed a number of bugs with importing CSV files of all kinds.
 
+Changes to Version 1.0.52
+  Fixed bug when starting fresh and then entering edit without first opening a CFG
+
 Bugs/To Do
     have a toggle for unit checking
     sort filter by docid
@@ -235,8 +238,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.51'
-PRODUCTION_DATE = 'November, 2025'
+VERSION = '1.0.52'
+PRODUCTION_DATE = 'April, 2026'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
 __LASTCOMPORT__ = 16

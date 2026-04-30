@@ -2103,7 +2103,7 @@ class e5_DatagridScreen(Screen):
                     self.e5_data.new_data[self.tablename] = False
 
     def on_enter(self):
-        if not self.e5_cfg.filename:
+        if not self.e5_cfg.filename or self.datagrid.data is None:
             self.popup = e5_MessageBox(APP_NAME, '\nOpen a CFG before trying to edit records.',
                                         call_back=self.go_back,
                                         colors=self.colors)
@@ -3665,6 +3665,7 @@ class DataGridDeletePanel(GridLayout):
 
 
 class DataGridAddNewPanel(GridLayout):
+    cols = 1
 
     def populate(self, data, fields, colors=None, addnew=False, call_back=None):
         if data is not None and fields is not None:
@@ -4035,7 +4036,7 @@ class DataGridWidget(TabbedPanel):
     def close_panels(self):
         self.check_changes()
         self.parent.parent.current = 'MainScreen'
-
+ 
     def cancel(self):
         pass
 

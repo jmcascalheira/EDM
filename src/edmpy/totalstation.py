@@ -851,6 +851,8 @@ class totalstation(object):
     def initialize(self):
         if self.make == 'Topcon':
             self.topcon_initialize()
+        if self.make == 'Nikon':
+            self.nikon_initialize()
 
     """
     Topcon specific functions for the total statin
@@ -971,8 +973,24 @@ class totalstation(object):
     Nikon specific functions (these won't work yet - they need to be converted to proper Nikon commands)
     See Nikon (SET) for running a Nikon total station as if it is Sokkkia
     """
+    def nikon_initialize(self):
+        """
+        This sets the instrument to output SD/HA/VA after each shot.
+        """
+        initialize_command = "CT\x02$DSX\x03"
+        initialize_command += self.nikon_checksum(initialize_command)
+        initialize_command = "\x01" + initialize_command + "\x04\r\n"
+        self.send(initialize_command.encode())
+        self.wait_for_received(2)
+        self.clear_serial_buffers()
+
     def launch_point_nikon(self):
-        self.send(chr(17).encode())
+        record_point_command = "CT\x02$TRK\x03"
+        record_point_command += self.nikon_checksum(record_point_command)
+        record_point_command = "\x01" + record_point_command + "\x04\r\n"
+        self.send(record_point_command.encode())
+        self.wait_for_received(1)
+        self.clear_serial_buffers()
 
     # see also https://groups.google.com/g/sci.engr.surveying/c/1tLM6JHtMgI?pli=1
     def nikon_checksum(self, buf):
@@ -995,10 +1013,12 @@ class totalstation(object):
         set_angle_command += self.nikon_checksum(set_angle_command)
         set_angle_command = "\x01" + set_angle_command + "\x04\r\n"
         self.send(set_angle_command.encode())
+        self.wait_for_received(2)
         self.clear_serial_buffers()
 
     def fetch_point_nikon(self):
         self.pnt = self.receive()
+        self.set_response_nikon()
         if self.pnt:
             self.parse_nikon()
             self.vhd_to_xyz()
@@ -1014,8 +1034,11 @@ class totalstation(object):
                     self.sloped = float(item[3:]) / 10000.0
                 elif item.startswith('HA'):
                     self.hangle = Angle(f'{item[3:7]}d{item[7:9]}m{item[9:12]}').d
-                elif item.startswith('V'):
+                elif item.startswith('VA'):
                     self.vangle = Angle(f'{item[3:7]}d{item[7:9]}m{item[9:12]}').d
+
+    def set_response_nikon(self):
+        self.response = self.received
 
     """
     Nikon SET protocols.  This means the Nikon acts like a Sokkia.
