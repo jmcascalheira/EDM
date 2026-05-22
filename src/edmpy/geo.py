@@ -20,7 +20,7 @@ class point:
         return not self.__eq__(other)
 
     def is_none(self):
-        return self.x is None and self.y is None and self.y is None
+        return self.x is None and self.y is None and self.z is None
 
     def round(self):
         self.x = round(self.x, 3)

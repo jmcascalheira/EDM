@@ -138,6 +138,9 @@ Changes to Version 1.0.51
 Changes to Version 1.0.52
   Fixed bug when starting fresh and then entering edit without first opening a CFG
 
+Changes to Version 1.0.53
+  Fixed some additional bugs in three point shift (microscribe and such)
+  
 Bugs/To Do
     have a toggle for unit checking
     sort filter by docid
@@ -238,8 +241,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.52'
-PRODUCTION_DATE = 'April, 2026'
+VERSION = '1.0.53'
+PRODUCTION_DATE = 'May, 2026'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
 __LASTCOMPORT__ = 16
@@ -1662,7 +1665,9 @@ class record_button(e5_button):
                 return '\nSelect two datums before recording.'
             if self.datum1.datum.name == self.datum2.datum.name:
                 return '\nThe two datums selected are the same.  Select two different datums before recording.'
-        elif self.setup_type == 'Record three datums':
+        elif self.setup_type == 'Three datum shift':
+            if self.datum1 is None or self.datum2 is None or self.datum3 is None:
+                return '\nSelect three datums before recording.'
             if self.datum1.datum.is_none() or self.datum2.datum.is_none() or self.datum3.datum.is_none():
                 return '\nSelect three datums before recording.'
             if self.datum1.datum.name == self.datum2.datum.name or self.datum1.datum.name == self.datum3.datum.name or self.datum2.datum.name == self.datum3.datum.name:
@@ -2081,9 +2086,9 @@ class setups(ScrollView):
 
             for n in range(3):
                 datum_name = self.data.get_datum(self.ini.get_value('SETUPS', '3DATUM_SHIFT_GLOBAL_%s' % (n + 1)))
-                datum_name = f'Record {datum_name.name}' if datum_name else f'Record datum {n + 1}'
+                datum_name = f'Record {datum_name.name}' if datum_name.name is not None else f'Record datum {n + 1}'
                 self.recorder.append(datum_recorder(datum_name, datum_no=n + 1, station=station,
-                                                                colors=self.colors, setup_type=setup_type))
+                                                                colors=self.colors, setup_type=setup_type, datum1=self.datum1, datum2=self.datum2, datum3=self.datum3, data=self.data))
                 self.scrollbox.add_widget(self.recorder[n])
 
         instructions.bind(texture_size=lambda instance, value: setattr(instance, 'height', value[1]))
@@ -2180,6 +2185,10 @@ class InitializeStationScreen(Screen):
                                                         call_back=[self.go_back, self.accept_setup],
                                                         selected=[False, False],
                                                         colors=self.colors))
+
+    def on_enter(self, *args):
+        self.rebuild(None, self.setup)
+        print('rebuild')
 
     def rebuild(self, instance, value):
         self.setup = value

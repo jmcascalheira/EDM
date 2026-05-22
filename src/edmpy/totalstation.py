@@ -644,6 +644,8 @@ class totalstation(object):
         return a.x * b.x + a.y * b.y + a.z * b.z if not a.is_none() and not b.is_none() else point()
 
     def normalize_vector(self, a):
+        if a.is_none():
+            return a
         if sqrt(self.dot_product(a, a)) == 0:
             return a
         else:
@@ -793,6 +795,9 @@ class totalstation(object):
             p = self.xyz
 
         if len(self.rotate_local) == 3 and len(self.rotate_global) == 3 and p:
+            if any(self.rotate_local[n].is_none() for n in range(3)) or any(self.rotate_global[n].is_none() for n in range(3)):
+                return p
+
             rotated_local = []
 
             # Shift point to relative to the origin
@@ -834,7 +839,7 @@ class totalstation(object):
             return result
 
         else:
-            return None
+            return p
 
     def rotate_initialize(self, local_datums, global_datums):
         # local and global datums are two lists of three corresponding points in the two grid systems
