@@ -36,6 +36,15 @@ jobs:
 
       - name: Build edm.exe
         working-directory: Windows
+        # Kivy has no GPU on the CI runner. Force the mock GL backend so the
+        # PyInstaller analysis can import kivy.core.* (esp. window) without
+        # trying to create a real OpenGL context (which hangs the build). This
+        # only affects build-time module discovery; the produced exe selects a
+        # real GL backend at runtime on the user's machine.
+        env:
+          KIVY_GL_BACKEND: mock
+          KIVY_NO_ARGS: '1'
+          KIVY_NO_CONSOLELOG: '1'
         run: |
           python -m PyInstaller --clean --noconfirm edmpy.spec
           Move-Item -Force dist\edmpy.exe dist\edm.exe
