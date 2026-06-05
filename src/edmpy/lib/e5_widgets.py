@@ -1970,6 +1970,7 @@ class e5_RecordEditScreen(Screen):
                     # instance.add_widget(self.bubblein)
         elif not instance.focus and not self.loading:
             self.refresh_linked_fields(instance.id, instance.text)
+            self.check_for_unit_change(instance)
 
     def add_new_menu_item_to_cfg(self, fieldname, value):
         field = self.e5_cfg.get(fieldname)
@@ -2041,6 +2042,37 @@ class e5_RecordEditScreen(Screen):
             z.text = str(round(self.z_new, 3))
         self.popup.dismiss()
 
+    def check_for_unit_change(self, instance):
+        # EDM only: when X or Y is edited, re-detect the unit the point now falls
+        # in and offer to update UNIT (mirrors the PRISM -> Z behaviour above).
+        if APP_NAME != 'EDM' or instance.id not in ('X', 'Y'):
+            return
+        if not hasattr(self.data, 'point_in_unit'):
+            return
+        unit_widget = self.get_widget_by_id(self, 'UNIT')
+        x_widget = self.get_widget_by_id(self, 'X')
+        y_widget = self.get_widget_by_id(self, 'Y')
+        if unit_widget is None or x_widget is None or y_widget is None:
+            return
+        if not (self.is_numeric(x_widget.text) and self.is_numeric(y_widget.text)):
+            return
+        from geo import point
+        new_unit = self.data.point_in_unit(point(float(x_widget.text), float(y_widget.text), 0.0))
+        if new_unit and new_unit != unit_widget.text:
+            self.new_unit = new_unit
+            old = unit_widget.text if unit_widget.text else '(none)'
+            message = f"\nThese coordinates now fall in unit {new_unit}.  Update the Unit from {old} to {new_unit}?"
+            self.popup = e5_MessageBox('Update Unit', message, response_type="YESNO",
+                                        call_back=[self.update_unit, self.close_popup], colors=self.colors)
+            self.popup.open()
+
+    def update_unit(self, instance):
+        unit_widget = self.get_widget_by_id(self, 'UNIT')
+        if unit_widget:
+            unit_widget.text = self.new_unit
+            self.refresh_linked_fields('UNIT', self.new_unit)
+        self.popup.dismiss()
+
     def get_widget_by_id(self, start=None, id=''):
         if not start:
             start = self
@@ -2086,7 +2118,9 @@ class e5_DatagridScreen(Screen):
         self.datagrid = DataGridWidget(data=main_data.db.table(main_tablename) if self.e5_data.db is not None and main_tablename else None,
                                         cfg=self.e5_cfg,
                                         colors=self.colors,
-                                        addnew=addnew)
+                                        addnew=addnew,
+                                        main_db=main_data,
+                                        points_tablename=main_tablename)
         self.add_widget(self.datagrid)
         if main_data.db is not None:
             if main_data.db.tables:
@@ -3295,12 +3329,18 @@ class DataGridTableData(RecycleView):
 
     popup = ObjectProperty(None)
 
-    def __init__(self, list_dicts=[], column_names=None, tb=None, e5_cfg=None, colors=None, *args, **kwargs):
+    main_db = None
+    points_tablename = None
+
+    def __init__(self, list_dicts=[], column_names=None, tb=None, e5_cfg=None, colors=None,
+                    main_db=None, points_tablename=None, *args, **kwargs):
         self.nrows = len(list_dicts) if len(list_dicts) != 1 else 2
         self.ncols = len(column_names)
         self.id = 'datatable'
         self.colors = colors if colors else ColorScheme()
         self.e5_cfg = e5_cfg
+        self.main_db = main_db
+        self.points_tablename = points_tablename
 
         super(DataGridTableData, self).__init__(*args, **kwargs)
 
@@ -3456,9 +3496,50 @@ class DataGridTableData(RecycleView):
                 #                widget.text = str(new_data[self.field])
                 self.datatable_widget.popup_scrollmenu = None
                 self.datatable_widget.popup_textbox = None
+                if APP_NAME == 'EDM' and self.field in ('X', 'Y') \
+                        and self.main_db is not None and hasattr(self.main_db, 'point_in_unit') \
+                        and self.points_tablename == self.main_db.table \
+                        and 'UNIT' in self.e5_cfg.fields():
+                    self.check_for_unit_change_grid()
             else:
                 self.popup = e5_MessageBox('Data error', is_valid, colors=self.colors)
                 self.popup.open()
+
+    def check_for_unit_change_grid(self):
+        # EDM only: after an X/Y cell edit on the points grid, re-detect the unit
+        # and offer to update UNIT (and its linked fields) for that record.
+        record = self.tb.get(doc_id=int(self.datagrid_doc_id))
+        if not record or 'X' not in record or 'Y' not in record:
+            return
+        try:
+            x, y = float(record['X']), float(record['Y'])
+        except (ValueError, TypeError):
+            return
+        from geo import point
+        new_unit = self.main_db.point_in_unit(point(x, y, 0.0))
+        old_unit = record.get('UNIT', '')
+        if new_unit and new_unit != old_unit:
+            self._pending_unit = new_unit
+            message = f"\nThese coordinates now fall in unit {new_unit}.  Update the Unit from {old_unit or '(none)'} to {new_unit}?"
+            self.popup = e5_MessageBox('Update Unit', message, response_type="YESNO",
+                                        call_back=[self.apply_unit_change_grid, self.cancel_unit_change_grid],
+                                        colors=self.colors)
+            self.popup.open()
+
+    def apply_unit_change_grid(self, instance):
+        self.popup.dismiss()
+        updates = {'UNIT': self._pending_unit}
+        link = self.main_db.get_link_fields('UNIT', self._pending_unit)
+        if link:
+            for f in link:
+                if f in self.e5_cfg.fields() and f not in ('X', 'Y', 'Z'):
+                    updates[f] = link[f]
+        self.tb.update(updates, doc_ids=[int(self.datagrid_doc_id)])
+        for f, v in updates.items():
+            self.update_recycle_data(self.datagrid_doc_id, f, v)
+
+    def cancel_unit_change_grid(self, instance):
+        self.popup.dismiss()
 
     def update_recycle_data(self, doc_id, field, value):
         for record in self.data:
@@ -3470,14 +3551,16 @@ class DataGridTableData(RecycleView):
 
 class DataGridTable(BoxLayout):
 
-    def __init__(self, list_dicts=[], column_names=None, tb=None, e5_cfg=None, colors=None, *args, **kwargs):
+    def __init__(self, list_dicts=[], column_names=None, tb=None, e5_cfg=None, colors=None,
+                    main_db=None, points_tablename=None, *args, **kwargs):
 
         super(DataGridTable, self).__init__(*args, **kwargs)
         self.orientation = "vertical"
 
         self.header = DataGridTableHeader(column_names, colors)
         self.table_data = DataGridTableData(list_dicts=list_dicts, column_names=column_names,
-                                            tb=tb, e5_cfg=e5_cfg, colors=colors)
+                                            tb=tb, e5_cfg=e5_cfg, colors=colors,
+                                            main_db=main_db, points_tablename=points_tablename)
 
         self.table_data.fbind('scroll_x', self.scroll_with_header)
 
@@ -3490,13 +3573,15 @@ class DataGridTable(BoxLayout):
 
 class DataGridGridPanel(BoxLayout):
 
-    def populate_data(self, tb, tb_fields, colors=None):
+    def populate_data(self, tb, tb_fields, colors=None, main_db=None, points_tablename=None):
         if tb is not None and tb_fields is not None:
             self.colors = colors if colors else ColorScheme()
             self.tb = tb
             self.sort_key = None
             self.column_names = ['doc_id'] + tb_fields.fields()
             self.tb_fields = tb_fields
+            self.main_db = main_db
+            self.points_tablename = points_tablename
             self._generate_table()
 
     def _generate_table(self, sort_key=None, disabled=None):
@@ -3511,7 +3596,9 @@ class DataGridGridPanel(BoxLayout):
             data.append(reformatted_row)
         data = sorted(data, key=lambda k: int(k['doc_id']), reverse=True)
         self.recycleview_box = DataGridTable(list_dicts=data, column_names=self.column_names,
-                                                tb=self.tb, e5_cfg=self.tb_fields, colors=self.colors)
+                                                tb=self.tb, e5_cfg=self.tb_fields, colors=self.colors,
+                                                main_db=getattr(self, 'main_db', None),
+                                                points_tablename=getattr(self, 'points_tablename', None))
         self.add_widget(self.recycleview_box)
 
 
@@ -3713,10 +3800,12 @@ class DataGridWidget(TabbedPanel):
     popup_textbox = None
     popup_field_widget = None
 
-    def __init__(self, data=None, cfg=None, colors=None, addnew=False, **kwargs):
+    def __init__(self, data=None, cfg=None, colors=None, addnew=False, main_db=None, points_tablename=None, **kwargs):
         super(DataGridWidget, self).__init__(**kwargs)
 
         self.addnew = addnew
+        self.main_db = main_db
+        self.points_tablename = points_tablename
 
         if data is not None:
             self.data = data
@@ -3748,7 +3837,8 @@ class DataGridWidget(TabbedPanel):
     def reload_data(self):
         # This next conditional is to avoid an exception in unit testing
         if hasattr(self, 'panel1'):
-            self.panel1.populate_data(tb=self.data, tb_fields=self.cfg, colors=self.colors)
+            self.panel1.populate_data(tb=self.data, tb_fields=self.cfg, colors=self.colors,
+                                        main_db=self.main_db, points_tablename=self.points_tablename)
             if self.get_widget_by_id(self.get_tab_by_name('Data').content, 'datatable'):
                 self.get_widget_by_id(self.get_tab_by_name('Data').content, 'datatable').datatable_widget = self
         # self.populate_panels()
@@ -3761,7 +3851,8 @@ class DataGridWidget(TabbedPanel):
     def populate_panels(self):
         # This next conditional is to avoid an exception in unit testing
         if hasattr(self, 'panel1'):
-            self.panel1.populate_data(tb=self.data, tb_fields=self.cfg, colors=self.colors)
+            self.panel1.populate_data(tb=self.data, tb_fields=self.cfg, colors=self.colors,
+                                        main_db=self.main_db, points_tablename=self.points_tablename)
             self.panel2.populate(data=self.data, fields=self.fields, colors=self.colors,
                                     call_back=self.save_record, revert=self.load_record)
             self.panel3.populate(colors=self.colors)
@@ -3916,7 +4007,8 @@ class DataGridWidget(TabbedPanel):
             if unique_error == '':
                 self.data.insert(self.strip_strings_from_number_fields(new_record))
                 self.data.new_data = True  # TODO Needs to reference parent
-                self.panel1.populate_data(tb=self.data, tb_fields=self.fields, colors=self.colors)
+                self.panel1.populate_data(tb=self.data, tb_fields=self.fields, colors=self.colors,
+                                            main_db=self.main_db, points_tablename=self.points_tablename)
                 self.clear_addnew()
             else:
                 self.open_popup(e5_MessageBox("Save error", unique_error, call_back=self.close_popup, colors=self.colors))
