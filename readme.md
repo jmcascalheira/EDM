@@ -103,6 +103,10 @@ I am working on this.  Once this program is working smoothly, I will add plot fu
 
 Recently (May, 2024) I was helping someone put the program on a Windows 10 tablet.  However, the virus protection software (Microsoft) said the Windows exe version was a virus and immediately removed it.  It took a lot of time to find a work around.  Eventually we made exe programs a virus exception.  This is not a great solution.  I can assure you that edm.exe does not contain a virus.  I also personally downloaded the same version and scanned it with my virus detection software.  Nothing.  I will try to find a computer where I can replicate this and see what part of my program is giving this problem.  If you experience this as well, let me know.
 
+#### Changes to Version 1.0.55
+  Station-setup prism popup now matches the app's button colors.
+  Cloud upload: fixed a lookup-error bug and now skips CFG fields not present in the online database (with a warning) instead of refusing to upload.
+
 #### Changes to Version 1.0.54
   UNIT now auto-updates (with confirmation) when you manually edit X or Y on a recorded point — in both the record-edit screen and the datagrid editor.
 

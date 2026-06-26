@@ -144,6 +144,10 @@ Changes to Version 1.0.53
 Changes to Version 1.0.54
   UNIT now auto-updates (with confirmation) when X or Y is edited on a recorded point
 
+Changes to Version 1.0.55
+  Station-setup prism popup now uses the app button colors
+  Cloud upload: fixed lookup-error handling and now skips CFG fields not in the online database instead of blocking
+
 Bugs/To Do
     have a toggle for unit checking
     sort filter by docid
@@ -244,7 +248,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.54'
+VERSION = '1.0.55'
 PRODUCTION_DATE = 'June, 2026'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
