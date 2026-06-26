@@ -2547,18 +2547,18 @@ class DataUploadScreen(Screen):
         route['type'] = status['type']
         return ('', route)
 
-    def check_for_cfg_fields_not_online(self, structure):
+    def split_cfg_fields(self, structure):
+        # Partition CFG fields into those that exist online (uploaded) and those
+        # that do not (skipped, with a warning) instead of blocking the upload.
+        # 'id' is always kept: it is the EDM key that maps to the online 'idno'.
         online_fields = [field.lower() for field, value in structure.items() if field not in ['pk', 'unique_together']]
-        missing_fields = []
+        keep, skip = [], []
         for field in self.cfg.fields():
-            if field.lower() not in online_fields:
-                missing_fields.append(field)
-
-        if missing_fields:
-            return (f"The following fields are in the CFG but not in the online database: {', '.join(missing_fields)}.\n\n"
-                    "Data cannot be transfered until this is fixed.")
-        else:
-            return ''
+            if field.lower() in online_fields or field.lower() == 'id':
+                keep.append(field)
+            else:
+                skip.append(field)
+        return keep, skip
 
     def parse_error(self, record, unique_together, error):
         error_message = self.unique_together_as_humanreadable(record, unique_together) + ' - '
@@ -2585,16 +2585,18 @@ class DataUploadScreen(Screen):
     def update_upload_progress(self, dt):
         if self.upload_thread is not None:
             if self.progress.label.text == 'Done\n':
+                skip_note = (f"\n\nNote: these CFG fields are not in the online database and were not uploaded: "
+                             f"{', '.join(self.skipped_fields)}.") if self.skipped_fields else ''
                 if self.error_message:
                     fails = list(dict.fromkeys(self.fails))
                     self.popup = e5_MessageBox('Data Upload',
                                                 f"\n{self.additions} records were added. {len(self.overwrites)} were updated.  {len(self.fails)} records "
                                                     f"could not be added or updated.\n\nThese are the reported errors:\n{self.error_message}\nAnd these are "
-                                                    f"the affected records:\n{', '.join(fails)}",
+                                                    f"the affected records:\n{', '.join(fails)}{skip_note}",
                                                 call_back=self.close_popup, colors=self.colors)
                 else:
                     self.popup = e5_MessageBox('Data Upload',
-                                                f'\n{self.additions} records were added. {len(self.overwrites)} were updated.',
+                                                f'\n{self.additions} records were added. {len(self.overwrites)} were updated.{skip_note}',
                                                 call_back=self.close_popup, colors=self.colors)
                 self.popup.open()
                 self.event.cancel()
@@ -2603,25 +2605,27 @@ class DataUploadScreen(Screen):
     def update_test_progress(self, dt):
         if self.test_thread is not None:
             if self.progress.label.text == 'Done\n':
+                skip_note = (f"\n\nNote: these CFG fields are not in the online database and would not be uploaded: "
+                             f"{', '.join(self.skipped_fields)}.") if self.skipped_fields else ''
                 if not self.error_message:
                     if len(self.overwrites) > 0:
                         self.overwrites = list(dict.fromkeys(self.overwrites))
                         message = f"\nTest results.  A data upload would add {self.additions} records and modify {len(self.overwrites)} records."
                         message += f"\n\nThe modified records would be {', '.join(self.overwrites)}"
-                        self.popup = e5_MessageBox('Data Upload Test', message, call_back=self.close_popup, colors=self.colors)
+                        self.popup = e5_MessageBox('Data Upload Test', message + skip_note, call_back=self.close_popup, colors=self.colors)
                     else:
                         message = f"\nTest results.  A data upload would add {self.additions} records and modify {len(self.overwrites)} records."
-                        self.popup = e5_MessageBox('Data Upload Test', message, call_back=self.close_popup, colors=self.colors)
+                        self.popup = e5_MessageBox('Data Upload Test', message + skip_note, call_back=self.close_popup, colors=self.colors)
                 else:
                     if len(self.fails) > 0:
                         self.fails = list(dict.fromkeys(self.fails))
                         message = f"\nA data upload would add {self.additions} records, modify {len(self.overwrites)} records.  "
                         message += f"However, the upload test produced errors.  Here first is a descripion of the errors:\n{self.error_message}."
                         message += f"\n\nHere is a list of the problem cases:\n{', '.join(self.fails)}"
-                        self.popup = e5_MessageBox('Data Upload Test', message, call_back=self.close_popup, colors=self.colors)
+                        self.popup = e5_MessageBox('Data Upload Test', message + skip_note, call_back=self.close_popup, colors=self.colors)
                     else:
                         self.popup = e5_MessageBox('Data Upload Test',
-                                                    f'\n{self.error_message}',
+                                                    f'\n{self.error_message}{skip_note}',
                                                     call_back=self.close_popup, colors=self.colors)
                 self.popup.open()
                 self.event.cancel()
@@ -2631,6 +2635,7 @@ class DataUploadScreen(Screen):
         self.overwrites = []
         self.additions = 0
         self.fails = []
+        self.skipped_fields = []
         route = self.get_route()
 
         #  TODO this is just to remove a flakeer8 error
@@ -2659,10 +2664,7 @@ class DataUploadScreen(Screen):
 
         structure = {**xyz_structure, **context_structure}
 
-        self.error_message = self.check_for_cfg_fields_not_online(structure)
-        if self.error_message:
-            self.progress.label.text = 'Done\n'
-            return
+        self.upload_fields, self.skipped_fields = self.split_cfg_fields(structure)
 
         unique_together_xyz = ['squid', 'suffix']
         unique_together_context = ['squid']
@@ -2675,7 +2677,7 @@ class DataUploadScreen(Screen):
             record_copy = record.copy()
             doc_id = record.doc_id
             record_copy = {k.lower(): v for k, v in record_copy.items()}
-            record_copy = self.remove_non_e5_cfg_fields(record_copy, self.cfg.fields())
+            record_copy = self.remove_non_e5_cfg_fields(record_copy, self.upload_fields)
             record_copy = self.clean_the_record(record_copy, xyz_structure)
             record_copy = self.clean_the_record(record_copy, context_structure)
             record_copy = self.fix_numeric_fields(record_copy, xyz_structure)
@@ -2700,7 +2702,7 @@ class DataUploadScreen(Screen):
                     url = f"{route['url']}{route['database']}/{route['table']}/update/{online_record['squid']}/"
                     record_copy = self.replace_keyfields(route, record_copy, unique_together, structure)
                     record_copy = self.fix_numeric_fields(record_copy, structure)
-                    record_copy = self.remove_non_e5_cfg_fields(record_copy, self.cfg.fields())
+                    record_copy = self.remove_non_e5_cfg_fields(record_copy, self.upload_fields)
                     if 'squid' not in record_copy:
                         record_copy['squid'] = f"{record_copy['unit']}-{record_copy['id']}"
                     response = requests.patch(url, data=record_copy, headers={'Authorization': f"Token {route['api']}"})
@@ -2720,7 +2722,7 @@ class DataUploadScreen(Screen):
                 elif not online_record:
                     record_copy = self.replace_keyfields(route, record_copy, unique_together, structure)
                     record_copy = self.fix_numeric_fields(record_copy, structure)
-                    record_copy = self.remove_non_e5_cfg_fields(record_copy, self.cfg.fields())
+                    record_copy = self.remove_non_e5_cfg_fields(record_copy, self.upload_fields)
                     if 'squid' not in record_copy:
                         record_copy['squid'] = f"{record_copy['unit']}-{record_copy['id']}"
                     if route['type'] == 'Standard':
@@ -2756,6 +2758,7 @@ class DataUploadScreen(Screen):
         self.overwrites = []
         self.additions = 0
         self.fails = []
+        self.skipped_fields = []
         route = self.get_route()
         self.progress.bar.value = 0
 
@@ -2773,10 +2776,7 @@ class DataUploadScreen(Screen):
             self.progress.label.text = 'Done\n'
             return
 
-        self.error_message = self.check_for_cfg_fields_not_online(structure)
-        if self.error_message:
-            self.progress.label.text = 'Done\n'
-            return
+        self.upload_fields, self.skipped_fields = self.split_cfg_fields(structure)
 
         unique_together = structure['unique_together'][0]
         self.error_message = ''
@@ -2805,7 +2805,7 @@ class DataUploadScreen(Screen):
                 record['id'] = online_record['id']
                 record = self.replace_keyfields(route, record, unique_together, structure)
                 record = self.fix_numeric_fields(record, structure)
-                record = self.remove_non_e5_cfg_fields(record, self.cfg.fields())
+                record = self.remove_non_e5_cfg_fields(record, self.upload_fields)
                 response = requests.patch(url, data=record, headers={'Authorization': f"Token {route['api']}"})
                 if response.status_code == 400:
                     self.error_message += self.parse_error(record, unique_together, json.loads(response.text))
@@ -2822,7 +2822,7 @@ class DataUploadScreen(Screen):
             elif not online_record:
                 record = self.replace_keyfields(route, record, unique_together, structure)
                 record = self.fix_numeric_fields(record, structure)
-                record = self.remove_non_e5_cfg_fields(record, self.cfg.fields())
+                record = self.remove_non_e5_cfg_fields(record, self.upload_fields)
                 if route['type'] == 'Standard':
                     url = f"{route['url']}{route['database']}/{route['table']}/"
                 else:
@@ -2903,6 +2903,7 @@ class DataUploadScreen(Screen):
         self.overwrites = []
         self.additions = 0
         self.fails = []
+        self.skipped_fields = []
         route = self.get_route()
 
         self.progress.label.text = 'Checking connection\n'
@@ -2928,10 +2929,7 @@ class DataUploadScreen(Screen):
 
         structure = {**xyz_structure, **context_structure}
 
-        self.error_message = self.check_for_cfg_fields_not_online(structure)
-        if self.error_message:
-            self.progress.label.text = 'Done\n'
-            return
+        self.upload_fields, self.skipped_fields = self.split_cfg_fields(structure)
 
         unique_together_xyz = ['squid', 'suffix']
         unique_together_context = ['squid']
@@ -2943,7 +2941,7 @@ class DataUploadScreen(Screen):
         for record in self.data.db.table(self.data.table).all():
             record_copy = record.copy()
             record_copy = {k.lower(): v for k, v in record_copy.items()}
-            record_copy = self.remove_non_e5_cfg_fields(record_copy, self.cfg.fields())
+            record_copy = self.remove_non_e5_cfg_fields(record_copy, self.upload_fields)
             record_copy = self.clean_the_record(record_copy, xyz_structure)
             record_copy = self.clean_the_record(record_copy, context_structure)
             record_copy = self.fix_numeric_fields(record_copy, xyz_structure)
@@ -2986,6 +2984,7 @@ class DataUploadScreen(Screen):
         self.overwrites = []
         self.additions = 0
         self.fails = []
+        self.skipped_fields = []
         route = self.get_route()
 
         self.progress.label.text = 'Checking connection\n'
@@ -3001,10 +3000,7 @@ class DataUploadScreen(Screen):
             self.progress.label.text = 'Done\n'
             return
 
-        self.error_message = self.check_for_cfg_fields_not_online(structure)
-        if self.error_message:
-            self.progress.label.text = 'Done\n'
-            return
+        self.upload_fields, self.skipped_fields = self.split_cfg_fields(structure)
 
         unique_together = structure['unique_together'][0]
         unique_keys = {}
@@ -3038,7 +3034,7 @@ class DataUploadScreen(Screen):
             else:
                 unique_keys[self.unique_together_as_humanreadable(record, unique_together)] += 1
 
-            record = self.remove_non_e5_cfg_fields(record, self.cfg.fields())
+            record = self.remove_non_e5_cfg_fields(record, self.upload_fields)
             record = self.fix_numeric_fields(record, structure)
 
             for field, value in record.items():
