@@ -170,7 +170,7 @@ Bugs/To Do
 from kivy.core.window import Window
 from kivy.config import Config
 from kivy.core.clipboard import Clipboard
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, Rectangle, Line, Point
 from kivy.app import App
 from kivy.factory import Factory
 from kivy.uix.popup import Popup
@@ -183,6 +183,7 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.uix.switch import Switch
+from kivy.uix.widget import Widget
 from kivy import __version__ as __kivy_version__
 
 import os
@@ -202,7 +203,7 @@ from lib.e5_widgets import e5_label, e5_button, e5_MessageBox, e5_DatagridScreen
 from lib.e5_widgets import edm_manual, DataGridTextBox, e5_SaveDialog, e5_LoadDialog, e5_PopUpMenu, e5_MainScreen, e5_InfoScreen, e5_scrollview_label
 from lib.e5_widgets import e5_LogScreen, e5_CFGScreen, e5_INIScreen, e5_SettingsScreen, e5_scrollview_menu, DataGridMenuList, SpinnerOptions
 from lib.e5_widgets import e5_JSONScreen, DataGridLabelAndField, DataUploadScreen
-from lib.colorscheme import ColorScheme
+from lib.colorscheme import ColorScheme, make_rgb, GOOGLE_COLORS
 from lib.misc import restore_window_size_position, filename_only, platform_name
 
 from geo import point, prism
@@ -255,6 +256,15 @@ __BUTTONS__ = 13
 __LASTCOMPORT__ = 16
 MAX_SCREEN_WIDTH = 400
 __program__ = 'EDM'
+
+# Distinct category colors for the Plot screen (strong/index-2 values from the
+# Google Material palette). Derived from .values() so no key can be missing.
+CATEGORY_COLORS = [make_rgb(v[2]) for v in GOOGLE_COLORS.values()]
+SINGLE_COLOR = make_rgb(GOOGLE_COLORS['blue'][2])
+
+# Larger fonts for the Plot screen (the default text font reads too small there).
+PLOT_FONT = '18sp'
+PLOT_TITLE_FONT = '20sp'
 
 
 class MainScreen(e5_MainScreen):
@@ -428,6 +438,11 @@ class MainScreen(e5_MainScreen):
                                         cfg=self.cfg))
 
         sm.add_widget(DataUploadScreen(name='UploadScreen',
+                                        data=self.data,
+                                        cfg=self.cfg,
+                                        colors=self.colors))
+
+        sm.add_widget(PlotScreen(name='PlotScreen',
                                         data=self.data,
                                         cfg=self.cfg,
                                         colors=self.colors))
@@ -1351,6 +1366,389 @@ class OptionsScreen(Screen):
 
     def prism_prompt(self, instance, value):
         self.station.prism_prompt = value
+
+    def go_back(self, instance):
+        sm.current = 'MainScreen'
+
+
+class PlotSwatch(Widget):
+    # A small filled color square used in the plot legend.
+    def __init__(self, rgba, **kwargs):
+        super(PlotSwatch, self).__init__(**kwargs)
+        self.rgba = rgba
+        self.bind(pos=self._draw, size=self._draw)
+        self._draw()
+
+    def _draw(self, *args):
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*self.rgba)
+            Rectangle(pos=self.pos, size=self.size)
+
+
+class ScatterView(Widget):
+    # Draws one orthographic projection (xy / xz / yz) of the points.
+    # PlotScreen feeds it the two relevant data coords per point plus the
+    # data bounds for those two axes.  Handles its own zoom / pan / click.
+
+    PAD = 40
+
+    def __init__(self, axes='xy', title='', colors=None, **kwargs):
+        super(ScatterView, self).__init__(**kwargs)
+        self.axes = axes
+        self.title = title
+        self.colors = colors if colors else ColorScheme()
+        self.point_size = 2.0
+        self.groups = {}            # {label: [(a, b, rec_dict), ...]}
+        self.cat_colors = {}        # {label: rgba}
+        self.amin = self.amax = self.bmin = self.bmax = 0.0
+        self.has_data = False
+        self.user_scale = 1.0
+        self.user_dx = 0.0
+        self.user_dy = 0.0
+        self.identify_cb = None
+        self.selected_rec = None
+        self._scale = 1.0
+        self._ox = self._oy = 0.0
+        self._touch_moved = 0.0
+        self.bind(size=self._on_geom, pos=self._on_geom)
+
+    def set_data(self, groups, cat_colors, bounds, point_size):
+        self.groups = groups
+        self.cat_colors = cat_colors
+        self.amin, self.amax, self.bmin, self.bmax = bounds
+        self.has_data = any(len(v) for v in groups.values())
+        self.point_size = point_size
+        self.redraw()
+
+    def reset_view(self):
+        self.user_scale = 1.0
+        self.user_dx = 0.0
+        self.user_dy = 0.0
+
+    def set_selected(self, rec):
+        self.selected_rec = rec
+        self.redraw()
+
+    def _coords_of(self, rec):
+        # locate the (a, b) coords of a record in this projection (by identity)
+        for pts in self.groups.values():
+            for item in pts:
+                if item[2] is rec:
+                    return item[0], item[1]
+        return None
+
+    def _on_geom(self, *args):
+        self.redraw()
+
+    def _compute_transform(self):
+        pad = self.PAD
+        x0, y0 = self.x + pad, self.y + pad
+        w = max(self.width - 2 * pad, 1)
+        h = max(self.height - 2 * pad, 1)
+        da = (self.amax - self.amin) or 1.0
+        db = (self.bmax - self.bmin) or 1.0
+        scale = min(w / da, h / db) * self.user_scale
+        ox = x0 + (w - da * scale) / 2.0 + self.user_dx
+        oy = y0 + (h - db * scale) / 2.0 + self.user_dy
+        self._scale, self._ox, self._oy = scale, ox, oy
+        return scale, ox, oy
+
+    def redraw(self):
+        self.canvas.after.clear()
+        pad = self.PAD
+        with self.canvas.after:
+            Color(*self.colors.text_color)
+            Line(rectangle=(self.x + pad, self.y + pad,
+                            max(self.width - 2 * pad, 1),
+                            max(self.height - 2 * pad, 1)), width=1)
+            if not self.has_data:
+                return
+            scale, ox, oy = self._compute_transform()
+            chunk = 8000
+            for label, pts in self.groups.items():
+                if not pts:
+                    continue
+                flat = []
+                for item in pts:
+                    flat.append(ox + (item[0] - self.amin) * scale)
+                    flat.append(oy + (item[1] - self.bmin) * scale)
+                Color(*self.cat_colors.get(label, SINGLE_COLOR))
+                for i in range(0, len(flat), chunk):
+                    Point(points=flat[i:i + chunk], pointsize=self.point_size)
+            if self.selected_rec is not None:
+                coords = self._coords_of(self.selected_rec)
+                if coords is not None:
+                    hx = ox + (coords[0] - self.amin) * scale
+                    hy = oy + (coords[1] - self.bmin) * scale
+                    r = max(self.point_size * 2.0 + 4.0, 8.0)
+                    Color(*self.colors.text_color)          # halo: contrasts the background
+                    Line(circle=(hx, hy, r + 1.5), width=1.0)
+                    Color(1.0, 0.15, 0.15, 1.0)             # red selection ring
+                    Line(circle=(hx, hy, r), width=2.0)
+
+    def on_touch_down(self, touch):
+        if not self.collide_point(*touch.pos):
+            return super(ScatterView, self).on_touch_down(touch)
+        if touch.is_mouse_scrolling:
+            if self.has_data and touch.button in ('scrollup', 'scrolldown'):
+                f = 1.1 if touch.button == 'scrollup' else (1.0 / 1.1)
+                self.user_scale = max(0.2, min(self.user_scale * f, 50.0))
+                self.redraw()
+            return True
+        touch.grab(self)
+        self._touch_moved = 0.0
+        return True
+
+    def on_touch_move(self, touch):
+        if touch.grab_current is self:
+            self.user_dx += touch.dx
+            self.user_dy += touch.dy
+            self._touch_moved += abs(touch.dx) + abs(touch.dy)
+            self.redraw()
+            return True
+        return super(ScatterView, self).on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            if self._touch_moved < 5 and self.has_data and self.identify_cb:
+                self._identify(touch.x, touch.y)
+            return True
+        return super(ScatterView, self).on_touch_up(touch)
+
+    def _identify(self, px, py):
+        scale, ox, oy = self._scale, self._ox, self._oy
+        best_rec = None
+        best_d2 = 14.0 ** 2
+        for pts in self.groups.values():
+            for item in pts:
+                dx = (ox + (item[0] - self.amin) * scale) - px
+                dy = (oy + (item[1] - self.bmin) * scale) - py
+                d2 = dx * dx + dy * dy
+                if d2 <= best_d2:
+                    best_d2 = d2
+                    best_rec = item[2]
+        if best_rec is not None:
+            self.identify_cb(best_rec)
+
+
+class PlotScreen(Screen):
+    # Scatter-plot view of all recorded points: X-Y plan, X-Z and Y-Z profiles,
+    # plus a legend/controls panel.  Colored by a chosen categorical field.
+
+    def __init__(self, data=None, cfg=None, colors=None, **kwargs):
+        super(PlotScreen, self).__init__(**kwargs)
+        self.data = data
+        self.cfg = cfg
+        self.colors = colors if colors else ColorScheme()
+        self.color_field = 'LEVEL'
+        self.point_size = 2.0
+        self.views = {}
+        self.records = []           # [(x, y, z, rec_dict), ...]
+        self.cat_colors = {}
+        self.xmin = self.xmax = self.ymin = self.ymax = self.zmin = self.zmax = 0.0
+        self.legend_grid = None
+        self.selected_label = None
+        self.color_spinner = None
+        self.selected_rec = None
+        self.build_screen()
+
+    def build_screen(self):
+        self.layout = BoxLayout(orientation='vertical', spacing=5, padding=5)
+        self.add_widget(self.layout)
+
+        self.grid = GridLayout(cols=2, spacing=5, padding=5)
+        self.layout.add_widget(self.grid)
+
+        for axes, title in (('xy', 'Plan  (X-Y)'), ('xz', 'Profile  (X-Z)'), ('yz', 'Profile  (Y-Z)')):
+            cell = BoxLayout(orientation='vertical')
+            title_lbl = e5_label(title, colors=self.colors, size_hint_y=None, height=30, halign='center')
+            title_lbl.font_size = PLOT_TITLE_FONT
+            cell.add_widget(title_lbl)
+            view = ScatterView(axes=axes, title=title, colors=self.colors)
+            view.identify_cb = self.on_point_identified
+            self.views[axes] = view
+            cell.add_widget(view)
+            self.grid.add_widget(cell)
+
+        self.grid.add_widget(self.build_controls())
+
+        self.back_button = e5_button('Back', selected=True, call_back=self.go_back,
+                                        colors=self.colors, height=50)
+        self.layout.add_widget(self.back_button)
+
+    def _panel_label(self, text, height):
+        lbl = e5_label(text, colors=self.colors, size_hint_y=None, height=height)
+        lbl.font_size = PLOT_FONT
+        return lbl
+
+    def build_controls(self):
+        panel = BoxLayout(orientation='vertical', spacing=5, padding=5)
+
+        panel.add_widget(self._panel_label('Color by', 30))
+        self.color_spinner = Spinner(text=self.color_field, values=self.color_options(),
+                                        size_hint_y=None, height=48, font_size=PLOT_FONT)
+        self.color_spinner.bind(text=self.set_color_field)
+        panel.add_widget(self.color_spinner)
+
+        panel.add_widget(self._panel_label('Point size', 30))
+        self.size_spinner = Spinner(text=str(int(self.point_size)), values=['1', '2', '3', '4', '6', '8'],
+                                        size_hint_y=None, height=48, font_size=PLOT_FONT)
+        self.size_spinner.bind(text=self.set_point_size)
+        panel.add_widget(self.size_spinner)
+
+        panel.add_widget(e5_button('Reset view', selected=False, call_back=self.reset_views,
+                                    colors=self.colors, height=48))
+
+        self.selected_label = self._panel_label('Tap a point to identify', 80)
+        panel.add_widget(self.selected_label)
+
+        scroll = ScrollView(size_hint=(1, 1))
+        self.legend_grid = GridLayout(cols=1, size_hint_y=None, spacing=2)
+        self.legend_grid.bind(minimum_height=self.legend_grid.setter('height'))
+        scroll.add_widget(self.legend_grid)
+        panel.add_widget(scroll)
+        return panel
+
+    def color_options(self):
+        opts = ['(single color)', 'LEVEL', 'CODE']
+        if self.cfg:
+            for name in self.cfg.fields():
+                field = self.cfg.get(name)
+                if field and getattr(field, 'inputtype', '') == 'MENU' and name not in opts:
+                    opts.append(name)
+        return opts
+
+    def category_of(self, rec):
+        if self.color_field == '(single color)':
+            return '(all points)'
+        val = rec.get(self.color_field, '')
+        return val if val not in (None, '') else '(blank)'
+
+    def on_pre_enter(self, *args):
+        if self.color_spinner is not None:
+            self.color_spinner.values = self.color_options()
+        self.selected_rec = None
+        self.load_data()
+        for view in self.views.values():
+            view.reset_view()
+            view.selected_rec = None
+        self.refresh_views()
+        self.build_legend()
+        if self.selected_label is not None:
+            self.selected_label.text = 'Tap a point to identify' if self.records else 'No points recorded yet'
+
+    def load_data(self):
+        self.records = []
+        self.xmin = self.xmax = self.ymin = self.ymax = self.zmin = self.zmax = 0.0
+        if self.data is None or self.data.db is None:
+            self.cat_colors = {}
+            return
+        try:
+            rows = self.data.db.table(self.data.table).all()
+        except (AttributeError, KeyError):
+            rows = []
+        first = True
+        for rec in rows:
+            try:
+                x = float(rec.get('X', ''))
+                y = float(rec.get('Y', ''))
+                z = float(rec.get('Z', ''))
+            except (TypeError, ValueError):
+                continue
+            self.records.append((x, y, z, rec))
+            if first:
+                self.xmin = self.xmax = x
+                self.ymin = self.ymax = y
+                self.zmin = self.zmax = z
+                first = False
+            else:
+                self.xmin, self.xmax = min(self.xmin, x), max(self.xmax, x)
+                self.ymin, self.ymax = min(self.ymin, y), max(self.ymax, y)
+                self.zmin, self.zmax = min(self.zmin, z), max(self.zmax, z)
+        self.build_category_colors()
+
+    def build_category_colors(self):
+        labels = []
+        for rec_tuple in self.records:
+            cat = self.category_of(rec_tuple[3])
+            if cat not in labels:
+                labels.append(cat)
+        labels.sort()
+        self.cat_colors = {}
+        for i, label in enumerate(labels):
+            if self.color_field == '(single color)':
+                self.cat_colors[label] = SINGLE_COLOR
+            else:
+                self.cat_colors[label] = CATEGORY_COLORS[i % len(CATEGORY_COLORS)]
+
+    def group_for(self, ai, bi):
+        groups = {}
+        for rec_tuple in self.records:
+            cat = self.category_of(rec_tuple[3])
+            groups.setdefault(cat, []).append((rec_tuple[ai], rec_tuple[bi], rec_tuple[3]))
+        return groups
+
+    def refresh_views(self):
+        self.views['xy'].set_data(self.group_for(0, 1), self.cat_colors,
+                                    (self.xmin, self.xmax, self.ymin, self.ymax), self.point_size)
+        self.views['xz'].set_data(self.group_for(0, 2), self.cat_colors,
+                                    (self.xmin, self.xmax, self.zmin, self.zmax), self.point_size)
+        self.views['yz'].set_data(self.group_for(1, 2), self.cat_colors,
+                                    (self.ymin, self.ymax, self.zmin, self.zmax), self.point_size)
+
+    def build_legend(self):
+        if self.legend_grid is None:
+            return
+        self.legend_grid.clear_widgets()
+        for label in sorted(self.cat_colors.keys()):
+            row = BoxLayout(orientation='horizontal', size_hint_y=None, height=32, spacing=4)
+            row.add_widget(PlotSwatch(self.cat_colors[label], size_hint_x=None, width=28))
+            lbl = e5_label(str(label), colors=self.colors)
+            lbl.font_size = PLOT_FONT
+            row.add_widget(lbl)
+            self.legend_grid.add_widget(row)
+
+    def set_color_field(self, spinner, text):
+        self.color_field = text
+        self.build_category_colors()
+        self.refresh_views()
+        self.build_legend()
+
+    def set_point_size(self, spinner, text):
+        try:
+            self.point_size = float(text)
+        except ValueError:
+            return
+        for view in self.views.values():
+            view.point_size = self.point_size
+            view.redraw()
+
+    def reset_views(self, instance):
+        for view in self.views.values():
+            view.reset_view()
+            view.redraw()
+
+    def on_point_identified(self, rec):
+        # highlight the same point in all three views
+        self.selected_rec = rec
+        for view in self.views.values():
+            view.set_selected(rec)
+        if self.selected_label is None:
+            return
+        unit = rec.get('UNIT', '')
+        idno = rec.get('ID', '')
+        squid = ('%s-%s' % (unit, idno)) if (unit or idno) else '(no id)'
+        txt = 'Selected: %s\nX %s  Y %s  Z %s' % (squid, rec.get('X', ''), rec.get('Y', ''), rec.get('Z', ''))
+        extra = []
+        for field in ('LEVEL', 'CODE'):
+            val = rec.get(field, '')
+            if val not in (None, ''):
+                extra.append('%s: %s' % (field.title(), val))
+        if extra:
+            txt += '\n' + '  '.join(extra)
+        self.selected_label.text = txt
 
     def go_back(self, instance):
         sm.current = 'MainScreen'
