@@ -148,7 +148,7 @@ Changes to Version 1.0.55
   Station-setup prism popup now uses the app button colors
   Cloud upload: fixed lookup-error handling and now skips CFG fields not in the online database instead of blocking
 
-Changes to Version 1.0.56
+Changes to Version 1.1.0
   Added a Plot screen: scatter views (X-Y, X-Z, Y-Z) of all recorded points, color by layer/code/any menu field, zoom/pan, and click a point to highlight it across all views
 
 Bugs/To Do
@@ -252,7 +252,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-VERSION = '1.0.56'
+VERSION = '1.1.0'
 PRODUCTION_DATE = 'June, 2026'
 __DEFAULT_FIELDS__ = ['X', 'Y', 'Z', 'SLOPED', 'VANGLE', 'HANGLE', 'STATIONX', 'STATIONY', 'STATIONZ', 'DATUMX', 'DATUMY', 'DATUMZ', 'LOCALX', 'LOCALY', 'LOCALZ', 'DATE', 'PRISM', 'ID']
 __BUTTONS__ = 13
