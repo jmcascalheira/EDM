@@ -2693,7 +2693,7 @@ class DataUploadScreen(Screen):
                     continue
                 unique_together = unique_together_xyz if tablename == 'xyz' else unique_together_context
                 online_record = self.record_already_exists(route, record_copy, unique_together, structure)
-                if online_record == 'Lookup error':
+                if online_record == 'Lookup error.':
                     self.error_message += f"\n\nRecord {self.unique_together_as_humanreadable(record_copy, unique_together)} - Unable to test whether this record already exists."
                     self.fails.append(self.unique_together_as_humanreadable(record_copy, unique_together))
                 elif online_record and self.overwrite.check.active:
@@ -2741,7 +2741,7 @@ class DataUploadScreen(Screen):
                             to_delete.append(doc_id)
                     else:
                         self.error_message += f'{self.unique_together_as_humanreadable(record_copy, unique_together)} - '
-                        self.error_message += 'Unexpected response - {response.reason}\n'
+                        self.error_message += f'Unexpected response - {response.reason}\n'
                 else:
                     self.error_message += f'{self.unique_together_as_humanreadable(record_copy, unique_together)} - '
                     self.error_message += 'Record already exists and overwrite set to false.\n'
@@ -2793,7 +2793,7 @@ class DataUploadScreen(Screen):
             self.progress.bar.value = record_counter / n_records
 
             online_record = self.record_already_exists(route, record, unique_together, structure)
-            if online_record == 'Lookup error':
+            if online_record == 'Lookup error.':
                 self.error_message += f"\n\nRecord {self.unique_together_as_humanreadable(record, unique_together)} - "
                 self.error_message += "Unable to test whether this record already exists."
                 self.fails.append(self.unique_together_as_humanreadable(record, unique_together))
@@ -2868,7 +2868,7 @@ class DataUploadScreen(Screen):
         for field, value in record.items():
             if field not in structure:
                 self.error_message += f'\n\nRecord {self.unique_together_as_humanreadable(record, unique_together)} - '
-                self.error_message += 'the field {field} is in datafile but not in the online database.'
+                self.error_message += f'the field {field} is in datafile but not in the online database.'
                 self.fails.append(self.unique_together_as_humanreadable(record, unique_together))
                 continue
             field_online_structure = structure[field]
