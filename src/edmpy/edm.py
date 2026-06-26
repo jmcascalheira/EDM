@@ -1768,7 +1768,8 @@ class record_button(e5_button):
             return DataGridMenuList(title="Select or Enter a Prism Height",
                                         menu_list=prism_names,
                                         menu_selected=self.default_prism.name if self.default_prism.name else '',
-                                        call_back=self.have_shot)
+                                        call_back=self.have_shot,
+                                        colors=self.colors)
         else:
             return DataGridTextBox(title='Enter a Prism Height',
                                         text=str(self.default_prism.height) if self.default_prism.height else '',
