@@ -26,6 +26,10 @@ source.exclude_dirs = tests, bin, build, .buildozer
 version.regex = VERSION = ['"](.*)['"]
 version.filename = %(source.dir)s/edm.py
 
+# (str) Icon and splash screen
+icon.filename = %(source.dir)s/data/icon.png
+presplash.filename = %(source.dir)s/data/presplash.png
+
 # (list) Application requirements
 # pyenchant is intentionally omitted (unused native dep). pyjnius is needed for
 # the Android Bluetooth backend. All others are pure-Python and pip-installable.
@@ -43,6 +47,9 @@ fullscreen = 0
 # Android specific
 #
 
+# (str) Presplash background color
+android.presplash_color = #0B3D66
+
 # (list) Permissions
 android.permissions = INTERNET, BLUETOOTH, BLUETOOTH_ADMIN, BLUETOOTH_CONNECT, BLUETOOTH_SCAN, ACCESS_FINE_LOCATION, WAKE_LOCK
 
@@ -55,9 +62,9 @@ android.minapi = 24
 # (bool) keep screen on while the app is in the foreground (needs WAKE_LOCK)
 android.wakelock = True
 
-# (list) The Android archs to build for.
-# arm64-v8a only during bring-up to halve build time; add armeabi-v7a for release.
-android.archs = arm64-v8a
+# (list) The Android archs to build for (arm64 for modern devices; v7a for
+# older 32-bit ones). Both are built for release coverage.
+android.archs = arm64-v8a, armeabi-v7a
 
 # (bool) enables Android auto backup feature (Android API >=23)
 android.allow_backup = True

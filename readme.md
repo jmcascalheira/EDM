@@ -33,7 +33,26 @@ pip install --upgrade edm-arch
 
 ##### Android
 
-I am not sure I will do an Android version or not.  I have look into how to connect a phone to a total station, and it doesn't look straightforward even with BlueTooth.  I will keep looking at this option.  Better will be to use a ChromeBook I think.
+An Android version is in development on the `android-port` branch. It is built with
+Buildozer / python-for-android and connects to the total station over **Bluetooth**
+(classic SPP). The build is produced by GitHub Actions (Buildozer only runs on Linux);
+the APK is available as an artifact of the "Build Android APK" workflow.
+
+Install (sideload): download the APK, transfer it to your Android device, allow
+"install unknown apps" for your file manager, and tap to install. It is a debug build,
+so Android will warn that the app is unverified — allow it.
+
+Connecting to a total station over Bluetooth:
+1. In **Android Settings → Bluetooth**, pair the total station first (the PIN is
+   typically `0000` for Leica and `1111` for Topcon).
+2. In EDMpy, go to **Setup → Configure Station**, choose your station brand, set the
+   communication type to **Bluetooth**, and select your paired device from the port list.
+3. Use **Measure** on the main screen to record a point.
+
+CFG and data files live in the app's own storage folder
+(`Android/data/com.oldstoneage.edmpy/files/`), which you can reach over USB or with a
+file manager to add or retrieve CFG/JSON/CSV files. You can also create a starter
+configuration in-app with **File → Default CFG**.
 
 ##### Linux and ChromeBooks
 
