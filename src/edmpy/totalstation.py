@@ -20,11 +20,15 @@ import time
 from kivy.utils import platform as _kivy_platform
 
 if _kivy_platform == 'android':
-    # No desktop-style COM ports on Android; the Bluetooth backend provides its
-    # own device enumeration.  Return an empty list so the app can still run in
-    # Simulate/Manual mode and offer Bluetooth device selection.
+    # On Android there are no desktop-style COM ports; instead expose the
+    # paired Bluetooth devices through the same (port, desc, hwid) interface so
+    # the existing COM-port selection UI lists total stations to connect to.
     def comports():
-        return []
+        try:
+            from lib.androidserial import bluetooth_comports
+            return bluetooth_comports()
+        except Exception:
+            return []
 elif os.name == 'nt':  # sys.platform == 'win32':
     from serial.tools.list_ports_windows import comports
 elif os.name == 'posix':
@@ -567,6 +571,13 @@ class totalstation(object):
             self.error_code = 1
             self.error_message = self.comport + ' is an invalid COM port number'
             return self.error_message
+
+        if _kivy_platform == 'android':
+            # Talk to the station over Bluetooth (classic SPP). BluetoothSerial
+            # mimics the serial.Serial subset used below, so the rest of open()
+            # and all the protocol code are unchanged.
+            from lib.androidserial import BluetoothSerial
+            self.serialcom = BluetoothSerial()
 
         self.serialcom.port = self.comport
         self.serialcom.baudrate = int(self.baudrate)

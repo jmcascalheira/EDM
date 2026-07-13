@@ -3182,12 +3182,26 @@ class EDMApp(App):
             os.makedirs(pathname, exist_ok=True)
 
     def build(self):
+        self.request_android_permissions()
         sm.add_widget(MainScreen(name='MainScreen'))
         sm.current = 'MainScreen'
         self.title = f"{APP_NAME} {VERSION}"
         if 'exit' in sys.argv:
             self.stop()
         return sm
+
+    def request_android_permissions(self):
+        # Runtime Bluetooth permissions (Android 12+ needs BLUETOOTH_CONNECT/SCAN;
+        # older needs location for BT scan). No-op / harmless off Android.
+        if platform_name() != 'Android':
+            return
+        try:
+            from android.permissions import request_permissions, Permission
+            request_permissions([Permission.BLUETOOTH_CONNECT,
+                                    Permission.BLUETOOTH_SCAN,
+                                    Permission.ACCESS_FINE_LOCATION])
+        except Exception:
+            pass
 
 
 Factory.register(APP_NAME, cls=EDMApp)
