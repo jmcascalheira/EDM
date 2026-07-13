@@ -207,7 +207,7 @@ from lib.e5_widgets import edm_manual, DataGridTextBox, e5_SaveDialog, e5_LoadDi
 from lib.e5_widgets import e5_LogScreen, e5_CFGScreen, e5_INIScreen, e5_SettingsScreen, e5_scrollview_menu, DataGridMenuList, SpinnerOptions
 from lib.e5_widgets import e5_JSONScreen, DataGridLabelAndField, DataUploadScreen
 from lib.colorscheme import ColorScheme, make_rgb, GOOGLE_COLORS
-from lib.misc import restore_window_size_position, filename_only, platform_name
+from lib.misc import restore_window_size_position, filename_only, platform_name, default_document_dir
 
 from geo import point, prism
 from db import DB
@@ -844,7 +844,7 @@ class MainScreen(e5_MainScreen):
 
     def save_default_cfg(self):
         content = e5_SaveDialog(filename='',
-                                start_path=self.cfg.path,
+                                start_path=self.cfg.path if self.cfg.path else default_document_dir(),
                                 save=self.save_default,
                                 cancel=self.dismiss_popup)
         self.popup = Popup(title="Create a new default CFG file",
@@ -970,7 +970,7 @@ class MainScreen(e5_MainScreen):
         self.csv_data_type = instance.text
         self.popup.dismiss()
         app_paths = AppDataPaths(APP_NAME)
-        start_path = self.cfg.path if self.cfg.path else app_paths.app_data_path
+        start_path = self.cfg.path if self.cfg.path else (default_document_dir() if platform_name() == 'Android' else app_paths.app_data_path)
         content = e5_LoadDialog(load=self.load_csv,
                                 cancel=self.dismiss_popup,
                                 start_path=start_path,

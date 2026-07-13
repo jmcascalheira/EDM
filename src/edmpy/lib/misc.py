@@ -1,4 +1,5 @@
 from os import path
+import os
 from kivy.utils import platform
 from kivy.core.window import Window
 
@@ -30,6 +31,44 @@ def filename_only(filename=None):
 def platform_name():
     # return "Android"
     return (['Windows', 'Linux', 'Android', 'MacOSX', 'IOS', 'Unknown'][['win', 'linux', 'android', 'macosx', 'ios', 'unknown'].index(platform)])
+
+
+def android_storage_dir():
+    '''A writable, user-reachable folder on Android: the app's external files
+    dir (e.g. /storage/emulated/0/Android/data/<pkg>/files), which the app can
+    read/write without runtime permissions and where users can drop CFG/JSON
+    files via USB or a file manager. Returns '' off Android or if unresolved.'''
+    if platform_name() != 'Android':
+        return ''
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        ext = PythonActivity.mActivity.getExternalFilesDir(None)
+        if ext is not None:
+            p = ext.getAbsolutePath()
+            os.makedirs(p, exist_ok=True)
+            return p
+    except Exception:
+        pass
+    try:
+        from android.storage import app_storage_path
+        p = app_storage_path()
+        os.makedirs(p, exist_ok=True)
+        return p
+    except Exception:
+        return ''
+
+
+def default_document_dir():
+    '''Where file dialogs should start and where new files default to. On
+    Android this is the app's external files dir; elsewhere the user's
+    documents folder.'''
+    if platform_name() == 'Android':
+        android = android_storage_dir()
+        if android:
+            return android
+    from platformdirs import user_documents_dir
+    return user_documents_dir()
 
 
 def restore_window_size_position(main_name, main_ini):

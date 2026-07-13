@@ -42,7 +42,7 @@ from platformdirs import user_data_dir, user_documents_dir
 from constants import __SPLASH_HELP__
 from constants import APP_NAME
 from lib.colorscheme import ColorScheme, make_rgb, BLACK, WHITE, GOOGLE_COLORS, MIDDLE_GREY, DARK_GREY
-from lib.misc import platform_name, locate_file
+from lib.misc import platform_name, locate_file, default_document_dir
 
 
 SCROLLBAR_WIDTH = 5
@@ -997,25 +997,24 @@ class e5_MainScreen(Screen):
             return False
 
     def show_load_cfg(self):
-        if platform_name() == "Android":
-            self.chooser = Chooser(self.android_load)
-            self.chooser.choose_content()
+        # Uses the in-app Kivy file browser on every platform. (The old Android
+        # branch referenced an undefined Chooser class and crashed.) On Android
+        # the browser starts in the app's external files dir.
+        if self.cfg.filename and self.cfg.path and os.path.exists(self.cfg.path):
+            start_path = self.cfg.path
         else:
-            if self.cfg.filename and self.cfg.path:
-                start_path = self.cfg.path
-            else:
-                start_path = user_documents_dir()
-            if not os.path.exists(start_path):
-                start_path = user_documents_dir()
-            content = e5_LoadDialog(load=self.load_cfg,
-                                    cancel=self.dismiss_popup,
-                                    start_path=start_path,
-                                    button_color=self.colors.button_color,
-                                    button_background=self.colors.button_background,
-                                    button_height=self.calc_button_height() / 100,
-                                    font_size=self.colors.button_font_size)
-            self.popup = Popup(title="Load CFG file", content=content, size_hint=(0.9, 0.9), auto_dismiss=False)
-            self.popup.open()
+            start_path = default_document_dir()
+        if not os.path.exists(start_path):
+            start_path = default_document_dir()
+        content = e5_LoadDialog(load=self.load_cfg,
+                                cancel=self.dismiss_popup,
+                                start_path=start_path,
+                                button_color=self.colors.button_color,
+                                button_background=self.colors.button_background,
+                                button_height=self.calc_button_height() / 100,
+                                font_size=self.colors.button_font_size)
+        self.popup = Popup(title="Load CFG file", content=content, size_hint=(0.9, 0.9), auto_dismiss=False)
+        self.popup.open()
 
     def calc_button_height(self):
         instance = Text(text='Test', font_size=28)
