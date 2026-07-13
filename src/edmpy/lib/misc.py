@@ -33,6 +33,10 @@ def platform_name():
 
 
 def restore_window_size_position(main_name, main_ini):
+    # On Android (and iOS) the window is full-screen and managed by the OS;
+    # setting Window.top/left/size is ignored at best and harmful at worst.
+    if platform_name() in ('Android', 'IOS'):
+        return
     Window.minimum_width = 450
     Window.minimum_height = 450
     if main_ini.get_value(main_name, "SCREENTOP"):

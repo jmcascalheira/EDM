@@ -17,13 +17,21 @@ import string
 import random
 import time
 
-if os.name == 'nt':  # sys.platform == 'win32':
+from kivy.utils import platform as _kivy_platform
+
+if _kivy_platform == 'android':
+    # No desktop-style COM ports on Android; the Bluetooth backend provides its
+    # own device enumeration.  Return an empty list so the app can still run in
+    # Simulate/Manual mode and offer Bluetooth device selection.
+    def comports():
+        return []
+elif os.name == 'nt':  # sys.platform == 'win32':
     from serial.tools.list_ports_windows import comports
 elif os.name == 'posix':
     from serial.tools.list_ports_posix import comports
-# ~ elif os.name == 'java':
 else:
-    raise ImportError("Sorry: no implementation for your platform ('{}') available".format(os.name))
+    def comports():
+        return []
 
 NO_ERROR = 0            # No total station error (Leica)
 TMC_CLEAR = 3           # Stop the current measure and clear the stored values

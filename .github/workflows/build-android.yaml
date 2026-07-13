@@ -1,0 +1,48 @@
+name: Build Android APK
+
+# Builds the EDMpy Android APK with Buildozer / python-for-android on a Linux
+# runner (Buildozer cannot run on macOS/Windows). Manual trigger only — builds
+# are long (~20-40 min). Scoped to the android-port branch so it never affects
+# desktop releases. Produces the APK as a downloadable artifact.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-port]
+    paths:
+      - 'src/edmpy/**'
+      - '.github/workflows/build-android.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            src/edmpy/.buildozer
+          key: buildozer-${{ hashFiles('src/edmpy/buildozer.spec') }}
+          restore-keys: buildozer-
+
+      - name: Build debug APK
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
+          workdir: src/edmpy
+          buildozer_version: stable
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: edmpy-debug-apk
+          path: ${{ steps.buildozer.outputs.filename }}
+          if-no-files-found: error
