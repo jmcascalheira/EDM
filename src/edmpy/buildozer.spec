@@ -33,8 +33,8 @@ version.filename = %(source.dir)s/edm.py
 # because it imports the removed `cgi` module. The desktop keeps kivy 2.1.0.
 requirements = python3,kivy==2.3.1,tinydb,angles,requests,platformdirs,appdata,pyserial,pyjnius,android
 
-# (str) Supported orientation (one of landscape, portrait, portrait-reverse or all)
-orientation = all
+# (str) Supported orientation (buildozer 1.5.0 rejects "all"; use a valid value)
+orientation = portrait
 
 # (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
