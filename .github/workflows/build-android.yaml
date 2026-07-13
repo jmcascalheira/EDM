@@ -21,6 +21,8 @@ jobs:
   build:
     # 22.04 is the most compatible base for Buildozer / the Android NDK toolchain.
     runs-on: ubuntu-22.04
+    # Cold arm64 builds run ~30-40 min; cap so a hang fails fast, not after 6h.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -51,8 +53,11 @@ jobs:
           path: |
             ~/.buildozer
             src/edmpy/.buildozer
-          key: buildozer-${{ hashFiles('src/edmpy/buildozer.spec') }}
-          restore-keys: buildozer-
+          # v2 namespace: never restore the old python3.14 build tree from the
+          # earlier unpinned run. restore-keys is scoped to v2 so it only reuses
+          # caches built with the current pinned p4a/Python toolchain.
+          key: buildozer-v2-${{ hashFiles('src/edmpy/buildozer.spec') }}
+          restore-keys: buildozer-v2-
 
       - name: Build debug APK
         working-directory: src/edmpy
