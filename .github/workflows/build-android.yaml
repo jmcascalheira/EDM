@@ -31,6 +31,13 @@ jobs:
         with:
           python-version: '3.10'
 
+      # The Android Gradle plugin (build-tools 34) requires Java 17; the runner
+      # defaults JAVA_HOME to Java 11. setup-java makes 17 the active JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
