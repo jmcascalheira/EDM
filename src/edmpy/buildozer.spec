@@ -29,7 +29,9 @@ version.filename = %(source.dir)s/edm.py
 # (list) Application requirements
 # pyenchant is intentionally omitted (unused native dep). pyjnius is needed for
 # the Android Bluetooth backend. All others are pure-Python and pip-installable.
-requirements = python3,kivy==2.1.0,tinydb,angles,requests,platformdirs,appdata,pyserial,pyjnius,android
+# Kivy 2.3.1 (not the desktop's 2.1.0) — 2.1.0 fails to build under modern p4a
+# because it imports the removed `cgi` module. The desktop keeps kivy 2.1.0.
+requirements = python3,kivy==2.3.1,tinydb,angles,requests,platformdirs,appdata,pyserial,pyjnius,android
 
 # (str) Supported orientation (one of landscape, portrait, portrait-reverse or all)
 orientation = all
@@ -54,7 +56,8 @@ android.minapi = 24
 android.wakelock = True
 
 # (list) The Android archs to build for.
-android.archs = arm64-v8a, armeabi-v7a
+# arm64-v8a only during bring-up to halve build time; add armeabi-v7a for release.
+android.archs = arm64-v8a
 
 # (bool) enables Android auto backup feature (Android API >=23)
 android.allow_backup = True

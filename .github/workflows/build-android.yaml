@@ -40,8 +40,10 @@ jobs:
       - name: Install Buildozer and Cython
         run: |
           python -m pip install --upgrade pip
-          # Kivy 2.1.0 must be compiled with Cython < 3.
-          pip install "cython<3" buildozer
+          # Pin a coherent, known-good toolchain. Unpinned buildozer pulls a
+          # bleeding-edge python-for-android (Python 3.14 / NDK r28c) that can't
+          # build our recipes. This 2024 stable stack uses Python 3.11 + NDK 25b.
+          pip install "cython==0.29.36" "buildozer==1.5.0" "python-for-android==2024.1.21"
 
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
