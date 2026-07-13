@@ -207,7 +207,7 @@ from lib.e5_widgets import edm_manual, DataGridTextBox, e5_SaveDialog, e5_LoadDi
 from lib.e5_widgets import e5_LogScreen, e5_CFGScreen, e5_INIScreen, e5_SettingsScreen, e5_scrollview_menu, DataGridMenuList, SpinnerOptions
 from lib.e5_widgets import e5_JSONScreen, DataGridLabelAndField, DataUploadScreen
 from lib.colorscheme import ColorScheme, make_rgb, GOOGLE_COLORS
-from lib.misc import restore_window_size_position, filename_only, platform_name, default_document_dir
+from lib.misc import restore_window_size_position, filename_only, platform_name, default_document_dir, android_storage_dir
 
 from geo import point, prism
 from db import DB
@@ -336,10 +336,19 @@ class MainScreen(e5_MainScreen):
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        fh = logging.FileHandler(os.path.join(user_log_dir(APP_NAME, 'OSA'), APP_NAME + '.log'))
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
+        # Never let logging setup crash the app (e.g. an unwritable path on Android).
+        try:
+            if platform_name() == 'Android':
+                log_dir = android_storage_dir() or user_log_dir(APP_NAME, 'OSA')
+            else:
+                log_dir = user_log_dir(APP_NAME, 'OSA')
+            os.makedirs(log_dir, exist_ok=True)
+            fh = logging.FileHandler(os.path.join(log_dir, APP_NAME + '.log'))
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+        except Exception:
+            pass
         logger.info(__program__ + ' started, logger initialized, and application built.')
 
     def add_screens(self):
@@ -3168,14 +3177,17 @@ class EDMApp(App):
         self.setup_paths()
 
     def setup_paths(self):
-        ini_file_path = user_data_dir(APP_NAME, 'OSA')
-        self.make_path(ini_file_path)
-
-        log_file_path = user_log_dir(APP_NAME, 'OSA')
-        self.make_path(log_file_path)
-
-        doc_file_path = user_documents_dir()
-        self.make_path(doc_file_path)
+        # Defensive: a path that can't be created must not crash startup (Android).
+        for path_getter in (lambda: user_data_dir(APP_NAME, 'OSA'),
+                                lambda: user_log_dir(APP_NAME, 'OSA'),
+                                lambda: user_documents_dir(),
+                                android_storage_dir):
+            try:
+                p = path_getter()
+                if p:
+                    self.make_path(p)
+            except Exception:
+                pass
 
     def make_path(self, pathname):
         if not os.path.isdir(pathname):
@@ -3183,12 +3195,44 @@ class EDMApp(App):
 
     def build(self):
         self.request_android_permissions()
-        sm.add_widget(MainScreen(name='MainScreen'))
-        sm.current = 'MainScreen'
+        try:
+            sm.add_widget(MainScreen(name='MainScreen'))
+            sm.current = 'MainScreen'
+        except Exception:
+            import traceback
+            tb = traceback.format_exc()
+            self.write_crash_log(tb)
+            return self.error_screen(tb)
         self.title = f"{APP_NAME} {VERSION}"
         if 'exit' in sys.argv:
             self.stop()
         return sm
+
+    def write_crash_log(self, tb):
+        # Persist a startup traceback where the user can retrieve it (Android
+        # external files dir), so a crash is diagnosable without adb/logcat.
+        try:
+            base = android_storage_dir() or os.path.expanduser('~')
+            with open(os.path.join(base, APP_NAME + '_crash.log'), 'w') as f:
+                f.write(tb)
+        except Exception:
+            pass
+
+    def error_screen(self, tb):
+        # Keep the app OPEN showing the traceback instead of closing on startup
+        # failure, so the user can screenshot and send it.
+        from kivy.uix.scrollview import ScrollView
+        from kivy.uix.label import Label
+        root = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        root.add_widget(Label(text='EDMpy could not start.\nPlease screenshot this and send it.',
+                                size_hint_y=None, height='80sp', halign='center'))
+        scroll = ScrollView()
+        msg = Label(text=tb, size_hint_y=None, halign='left', valign='top', font_size='11sp')
+        msg.bind(width=lambda *a: setattr(msg, 'text_size', (msg.width, None)),
+                    texture_size=lambda *a: setattr(msg, 'height', msg.texture_size[1]))
+        scroll.add_widget(msg)
+        root.add_widget(scroll)
+        return root
 
     def request_android_permissions(self):
         # Runtime Bluetooth permissions (Android 12+ needs BLUETOOTH_CONNECT/SCAN;
