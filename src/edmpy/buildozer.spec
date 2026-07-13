@@ -68,6 +68,12 @@ android.accept_sdk_license = True
 # (str) Bootstrap to use for android builds
 p4a.bootstrap = sdl2
 
+# (str) python-for-android version. Buildozer CLONES p4a from git (it ignores a
+# pip-installed one), and the default 'master' is bleeding-edge (Python 3.14 /
+# NDK r28c) which breaks our recipes. Pin the known-good release: v2024.01.21
+# builds Python 3.11 + NDK 25b and works with Kivy 2.3.1.
+p4a.branch = v2024.01.21
+
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
